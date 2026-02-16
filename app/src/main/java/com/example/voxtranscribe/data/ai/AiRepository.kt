@@ -8,6 +8,7 @@ import javax.inject.Singleton
 interface AiRepository {
     suspend fun summarize(transcript: String): String
     suspend fun generateMeetingNotes(transcript: String): String
+    suspend fun generateTitle(transcript: String): String
 }
 
 /**
@@ -20,5 +21,9 @@ class MockAiRepository : AiRepository {
 
     override suspend fun generateMeetingNotes(transcript: String): String {
         return "• Decision: Keep using Mock AI\n• Action: Buy more coffee\n• Highlight: App development is fast!"
+    }
+
+    override suspend fun generateTitle(transcript: String): String {
+        return "Mock Meeting Title"
     }
 }

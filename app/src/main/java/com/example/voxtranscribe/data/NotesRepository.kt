@@ -31,6 +31,10 @@ class NotesRepository(private val notesDao: NotesDao) {
         notesDao.updateAiResults(noteId, summary, structuredNotes)
     }
 
+    suspend fun updateNoteTitle(noteId: Long, title: String) {
+        notesDao.updateNoteTitle(noteId, title)
+    }
+
     suspend fun deleteNote(note: Note) {
         notesDao.deleteNote(note)
     }

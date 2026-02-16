@@ -27,8 +27,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Segment
+import com.example.voxtranscribe.data.ai.DownloadState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +42,7 @@ fun DetailScreen(
     val noteDetail by viewModel.getNoteDetail(noteId).collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
+    val downloadState by viewModel.downloadState.collectAsStateWithLifecycle()
     
     val context = LocalContext.current
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
@@ -115,22 +118,55 @@ fun DetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Button(
-                        onClick = {
-                            noteDetail?.let { detail ->
-                                val fullText = detail.segments.joinToString("\n") { it.text }
-                                viewModel.generateAiInsights(noteId, fullText)
+                    // Logic for AI Button: Download vs Process
+                    if (downloadState != DownloadState.Completed) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = { viewModel.downloadModel() },
+                                enabled = downloadState != DownloadState.Downloading,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (downloadState is DownloadState.Error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondary
+                                )
+                            ) {
+                                if (downloadState == DownloadState.Downloading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSecondary)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Downloading...", style = MaterialTheme.typography.labelLarge)
+                                } else {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(if (downloadState is DownloadState.Error) "Retry Download" else "Download AI Model", style = MaterialTheme.typography.labelLarge)
+                                }
                             }
-                        },
-                        enabled = !isProcessing && noteDetail?.segments?.isNotEmpty() == true,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (isProcessing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Process AI", style = MaterialTheme.typography.labelLarge)
+                            
+                            if (downloadState is DownloadState.Error) {
+                                Text(
+                                    text = (downloadState as DownloadState.Error).message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                noteDetail?.let { detail ->
+                                    val fullText = detail.segments.joinToString("\n") { it.text }
+                                    viewModel.generateAiInsights(noteId, fullText)
+                                }
+                            },
+                            enabled = !isProcessing && noteDetail?.segments?.isNotEmpty() == true,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Process AI", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
                     }
 

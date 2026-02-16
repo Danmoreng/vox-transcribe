@@ -26,6 +26,9 @@ interface NotesDao {
     @Query("UPDATE notes SET summary = :summary, structuredNotes = :structuredNotes WHERE noteId = :noteId")
     suspend fun updateAiResults(noteId: Long, summary: String?, structuredNotes: String?)
 
+    @Query("UPDATE notes SET title = :title WHERE noteId = :noteId")
+    suspend fun updateNoteTitle(noteId: Long, title: String)
+
     @Delete
     suspend fun deleteNote(note: Note)
 

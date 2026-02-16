@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.ai.AiRepository
+import com.example.voxtranscribe.data.ai.ModelDownloadManager
 import com.example.voxtranscribe.data.db.NoteWithSegments
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -13,7 +14,8 @@ import javax.inject.Inject
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val notesRepository: NotesRepository,
-    private val aiRepository: AiRepository
+    private val aiRepository: AiRepository,
+    private val modelDownloadManager: ModelDownloadManager
 ) : ViewModel() {
 
     private val _isProcessing = MutableStateFlow(false)
@@ -21,6 +23,12 @@ class DetailViewModel @Inject constructor(
 
     private val _isDeleted = MutableStateFlow(false)
     val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
+
+    val downloadState = modelDownloadManager.downloadState
+
+    fun downloadModel() {
+        modelDownloadManager.downloadModel()
+    }
 
     fun getNoteDetail(noteId: Long): StateFlow<NoteWithSegments?> {
         return notesRepository.getNoteWithSegments(noteId)
@@ -32,6 +40,10 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             _isProcessing.value = true
             try {
+                android.util.Log.d("DetailViewModel", "Requesting title...")
+                val title = aiRepository.generateTitle(transcript)
+                notesRepository.updateNoteTitle(noteId, title)
+                
                 android.util.Log.d("DetailViewModel", "Requesting summary...")
                 val summary = aiRepository.summarize(transcript)
                 android.util.Log.d("DetailViewModel", "Summary received: ${summary.take(50)}...")
