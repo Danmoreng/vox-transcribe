@@ -23,6 +23,9 @@ interface NotesDao {
     @Insert
     suspend fun insertSegment(segment: TranscriptSegment)
 
+    @Query("UPDATE notes SET summary = :summary, structuredNotes = :structuredNotes WHERE noteId = :noteId")
+    suspend fun updateAiResults(noteId: Long, summary: String?, structuredNotes: String?)
+
     @Transaction
     @Query("SELECT * FROM notes WHERE noteId = :noteId")
     fun getNoteWithSegments(noteId: Long): Flow<NoteWithSegments>

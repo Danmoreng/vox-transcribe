@@ -27,5 +27,9 @@ class NotesRepository(private val notesDao: NotesDao) {
         notesDao.insertSegment(segment)
     }
 
+    suspend fun updateAiResults(noteId: Long, summary: String?, structuredNotes: String?) {
+        notesDao.updateAiResults(noteId, summary, structuredNotes)
+    }
+
     fun getNoteWithSegments(noteId: Long) = notesDao.getNoteWithSegments(noteId)
 }

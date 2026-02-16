@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [Note::class, TranscriptSegment::class], version = 1, exportSchema = false)
+@Database(entities = [Note::class, TranscriptSegment::class], version = 2, exportSchema = false)
 abstract class VoxDatabase : RoomDatabase() {
     abstract fun notesDao(): NotesDao
 

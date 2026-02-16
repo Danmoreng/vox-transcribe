@@ -9,65 +9,52 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 *Objective: Prepare the app for multi-screen navigation and structured dependency management.*
 
 1.  **Hilt Integration:** ✅
-    *   Add Hilt dependencies to `libs.versions.toml`.
-    *   Annotate `VoxApplication` class with `@HiltAndroidApp`.
-    *   Create `DatabaseModule` and `RepositoryModule`.
 2.  **Navigation Setup:** ✅
-    *   Implement `androidx.navigation:navigation-compose`.
-    *   Define `Screen` sealed class: `Home`, `Record`, `Detail(noteId: Long)`.
 
 ---
 
 ## **Phase 2: Data Persistence (Room)** ✅
 *Objective: Ensure no transcription is ever lost.*
 
-1.  **Entities:** ✅
-    *   `NoteEntity`: `id`, `title`, `createdAt`, `duration`, `summary`.
-    *   `SegmentEntity`: `id`, `noteId` (FK), `text`, `timestamp`, `isFinal`.
-2.  **DAOs:** ✅
-    *   `NotesDao`: `getAllNotes(): Flow<List<NoteEntity>>`, `getNoteWithSegments(id): Flow<NoteWithSegments>`.
-3.  **Repository Refactor:** ✅
-    *   Repository now coordinates between `AndroidSpeechRecognizer` and `NotesDao`.
-    *   Every "Final" result from the recognizer is immediately persisted to Room.
+1.  **Entities & DAOs:** ✅
+2.  **Repository Refactor:** ✅
 
 ---
 
-## **Phase 3: Background Reliability (Foreground Service)** 🔄
+## **Phase 3: Background Reliability (Foreground Service)** ✅
 *Objective: Support long-running sessions (e.g., 60min meetings) without interruption.*
 
-1.  **TranscriptionService:**
-    *   Extend `LifecycleService`.
-    *   Manage the `SpeechRecognizer` lifecycle here.
-    *   Use `startForeground` with a notification showing live word count or "Listening...".
-2.  **The "Forever Loop" Logic:**
-    *   Implement `RecognitionListener`.
-    *   `onResults`: Save to DB, then call `startListening()` immediately.
-    *   `onError`: If code is `7` (Timeout) or `8` (Busy), wait 500ms and restart.
+1.  **TranscriptionService:** ✅
+    *   Created `LifecycleService` with `startForeground`.
+2.  **The "Forever Loop" Logic:** ✅
+    *   Implemented automatic restart on timeout/silence.
 
 ---
 
-## **Phase 4: Domain & UI Refinement** 🔄
+## **Phase 4: Domain & UI Refinement** ✅
 *Objective: Transform the UI into a "Time Machine" log.*
 
 1.  **Rich Models:** ✅
-    *   Replaced `Flow<String>` with `Flow<List<TranscriptSegment>>`.
-2.  **Recording Screen:** ✅
-    *   `LazyColumn` with auto-scrolling support.
-3.  **Home Screen:** ✅
-    *   Dashboard showing recent recordings.
-4.  **Detail Screen:** 🔄 (Next Task)
-    *   Read-only view of a session's segments with timestamps.
-    *   Export/Copy functionality.
+2.  **Home Screen:** ✅
+3.  **Recording Screen:** ✅
+4.  **Detail Screen:** ✅
+    *   Implemented segment-based view with timestamps and export functionality.
 
 ---
 
-## **Phase 5: Intelligence (Gemini Nano)** 📅
-*Objective: On-device summarization.*
+## **Phase 5: Intelligence (Local AI)** 🔄
+*Objective: On-device summarization and meeting notes generation.*
 
 1.  **AI Integration:**
-    *   Use Google AI Edge SDK.
-    *   Create a `Summarizer` implementation.
-    *   Add "Summarize" button to the Note Detail screen.
+    *   Integrate Google AI Edge SDK (Gemini Nano) or equivalent local LLM.
+    *   Implement `AiRepository` for model management and inference.
+2.  **Smart Generation Features:**
+    *   **Executive Summary:** A concise overview of the conversation.
+    *   **Structured Meeting Notes:** Automatic extraction of action items, key decisions, and bulleted highlights.
+3.  **Persistence & UI:**
+    *   Update `NoteEntity` schema to store `summary` and `structuredNotes`.
+    *   Add "AI Generate" triggers to the Detail Screen.
+    *   Implement a "Review" UI showing the processed insights alongside the transcript.
 
 ---
 
@@ -75,4 +62,4 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 - **State:** Use `StateFlow` in ViewModels, collected with `collectAsStateWithLifecycle`.
 - **Threading:** Database ops on `Dispatchers.IO`, Speech UI updates on `Dispatchers.Main`.
 - **UI:** Pure Material 3 components.
-- **Testing:** Add `TranscriptionRepositoryTest` using a fake `SpeechRecognizer`.
+- **AI Safety:** Ensure all processing remains strictly on-device for privacy.

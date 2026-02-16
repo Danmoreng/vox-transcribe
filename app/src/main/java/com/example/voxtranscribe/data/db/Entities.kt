@@ -11,7 +11,8 @@ data class Note(
     val title: String,
     val startTime: Long = System.currentTimeMillis(),
     val endTime: Long? = null,
-    val summary: String? = null
+    val summary: String? = null,
+    val structuredNotes: String? = null
 )
 
 @Entity(
