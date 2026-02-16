@@ -33,8 +33,7 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideAiRepository(): AiRepository {
-        // Switch to GeminiAiRepository() when on supported hardware
-        return MockAiRepository()
+    fun provideAiRepository(impl: GeminiAiRepository): AiRepository {
+        return impl
     }
 }

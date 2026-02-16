@@ -53,7 +53,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.mlkit.genai.prompt)
+    implementation(libs.mlkit.genai.summarization)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.kotlinx.coroutines.guava)
 
     // Hilt
     implementation(libs.hilt.android)

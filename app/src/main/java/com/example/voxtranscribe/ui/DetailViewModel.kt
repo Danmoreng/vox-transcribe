@@ -25,12 +25,22 @@ class DetailViewModel @Inject constructor(
     }
 
     fun generateAiInsights(noteId: Long, transcript: String) {
+        android.util.Log.d("DetailViewModel", "Generating AI insights for note: $noteId")
         viewModelScope.launch {
             _isProcessing.value = true
             try {
+                android.util.Log.d("DetailViewModel", "Requesting summary...")
                 val summary = aiRepository.summarize(transcript)
+                android.util.Log.d("DetailViewModel", "Summary received: ${summary.take(50)}...")
+                
+                android.util.Log.d("DetailViewModel", "Requesting meeting notes...")
                 val notes = aiRepository.generateMeetingNotes(transcript)
+                android.util.Log.d("DetailViewModel", "Notes received: ${notes.take(50)}...")
+                
                 notesRepository.updateAiResults(noteId, summary, notes)
+                android.util.Log.d("DetailViewModel", "AI results saved to database.")
+            } catch (e: Exception) {
+                android.util.Log.e("DetailViewModel", "Error generating AI insights", e)
             } finally {
                 _isProcessing.value = false
             }
