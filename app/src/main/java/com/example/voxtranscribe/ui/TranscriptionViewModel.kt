@@ -3,13 +3,20 @@ package com.example.voxtranscribe.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
+import com.example.voxtranscribe.data.TranscriptionService
 import com.example.voxtranscribe.data.db.Note
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 import javax.inject.Inject
 
 data class TranscriptionStats(
@@ -21,7 +28,8 @@ data class TranscriptionStats(
 @HiltViewModel
 class TranscriptionViewModel @Inject constructor(
     private val speechRepository: TranscriptionRepository,
-    private val notesRepository: NotesRepository
+    private val notesRepository: NotesRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     // Persistent data
@@ -81,29 +89,35 @@ class TranscriptionViewModel @Inject constructor(
             _durationSeconds.value = 0
             
             // 1. Create Note in DB
-            val title = "Note @ ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
+            val title = "Note @ ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"
             currentNoteId = notesRepository.createNote(title)
             
-            // 2. Start Engine
+            // 2. Start Service
+            val intent = Intent(context, TranscriptionService::class.java).apply {
+                action = TranscriptionService.ACTION_START
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+            
             startTimer()
-            speechRepository.startListening()
             _isListening.value = true
         }
     }
 
     fun stopRecording() {
         stopTimer()
-        speechRepository.stopListening()
-        _isListening.value = false
         
-        // Update end time
-        viewModelScope.launch {
-            currentNoteId?.let { id ->
-                // In a real app we'd fetch the note and update endTime
-                // For now, we just reset the ID to close the session
-            }
-            currentNoteId = null
+        // Stop Service
+        val intent = Intent(context, TranscriptionService::class.java).apply {
+            action = TranscriptionService.ACTION_STOP
         }
+        context.startService(intent)
+        
+        _isListening.value = false
+        currentNoteId = null
     }
 
     private fun startTimer() {
