@@ -24,6 +24,7 @@ import java.util.*
 @Composable
 fun HomeScreen(
     onNavigateToRecord: () -> Unit,
+    onNavigateToDetail: (Long) -> Unit,
     viewModel: TranscriptionViewModel = hiltViewModel()
 ) {
     val notes by viewModel.allNotes.collectAsStateWithLifecycle()
@@ -54,7 +55,7 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(notes) { note ->
-                    NoteCard(note)
+                    NoteCard(note, onClick = { onNavigateToDetail(note.noteId) })
                 }
             }
         }
@@ -62,10 +63,11 @@ fun HomeScreen(
 }
 
 @Composable
-fun NoteCard(note: Note) {
+fun NoteCard(note: Note, onClick: () -> Unit) {
     val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     Card(
         modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -79,3 +81,4 @@ fun NoteCard(note: Note) {
         }
     }
 }
+

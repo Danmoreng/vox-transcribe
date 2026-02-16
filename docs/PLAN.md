@@ -5,34 +5,34 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 
 ---
 
-## **Phase 1: Dependency Injection & Navigation**
+## **Phase 1: Dependency Injection & Navigation** ✅
 *Objective: Prepare the app for multi-screen navigation and structured dependency management.*
 
-1.  **Hilt Integration:**
+1.  **Hilt Integration:** ✅
     *   Add Hilt dependencies to `libs.versions.toml`.
     *   Annotate `VoxApplication` class with `@HiltAndroidApp`.
     *   Create `DatabaseModule` and `RepositoryModule`.
-2.  **Navigation Setup:**
+2.  **Navigation Setup:** ✅
     *   Implement `androidx.navigation:navigation-compose`.
     *   Define `Screen` sealed class: `Home`, `Record`, `Detail(noteId: Long)`.
 
 ---
 
-## **Phase 2: Data Persistence (Room)**
+## **Phase 2: Data Persistence (Room)** ✅
 *Objective: Ensure no transcription is ever lost.*
 
-1.  **Entities:**
+1.  **Entities:** ✅
     *   `NoteEntity`: `id`, `title`, `createdAt`, `duration`, `summary`.
     *   `SegmentEntity`: `id`, `noteId` (FK), `text`, `timestamp`, `isFinal`.
-2.  **DAOs:**
+2.  **DAOs:** ✅
     *   `NotesDao`: `getAllNotes(): Flow<List<NoteEntity>>`, `getNoteWithSegments(id): Flow<NoteWithSegments>`.
-3.  **Repository Refactor:**
-    *   Repository should now coordinate between `AndroidSpeechRecognizer` and `NotesDao`.
-    *   Every "Final" result from the recognizer must be immediately persisted to Room.
+3.  **Repository Refactor:** ✅
+    *   Repository now coordinates between `AndroidSpeechRecognizer` and `NotesDao`.
+    *   Every "Final" result from the recognizer is immediately persisted to Room.
 
 ---
 
-## **Phase 3: Background Reliability (Foreground Service)**
+## **Phase 3: Background Reliability (Foreground Service)** 🔄
 *Objective: Support long-running sessions (e.g., 60min meetings) without interruption.*
 
 1.  **TranscriptionService:**
@@ -43,25 +43,25 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
     *   Implement `RecognitionListener`.
     *   `onResults`: Save to DB, then call `startListening()` immediately.
     *   `onError`: If code is `7` (Timeout) or `8` (Busy), wait 500ms and restart.
-    *   **Silence Management:** Use `AudioManager` to mute the system recognition "beeps" if possible.
 
 ---
 
-## **Phase 4: Domain & UI Refinement**
+## **Phase 4: Domain & UI Refinement** 🔄
 *Objective: Transform the UI into a "Time Machine" log.*
 
-1.  **Rich Models:**
-    *   Replace `Flow<String>` with `Flow<List<TranscriptSegment>>`.
-2.  **Recording Screen:**
-    *   `LazyColumn` with `reverseLayout = true`.
-    *   Items: `TimestampedBubble(text, time, isFinal)`.
-3.  **Home Screen:**
+1.  **Rich Models:** ✅
+    *   Replaced `Flow<String>` with `Flow<List<TranscriptSegment>>`.
+2.  **Recording Screen:** ✅
+    *   `LazyColumn` with auto-scrolling support.
+3.  **Home Screen:** ✅
     *   Dashboard showing recent recordings.
-    *   Swipe-to-delete functionality.
+4.  **Detail Screen:** 🔄 (Next Task)
+    *   Read-only view of a session's segments with timestamps.
+    *   Export/Copy functionality.
 
 ---
 
-## **Phase 5: Intelligence (Gemini Nano)**
+## **Phase 5: Intelligence (Gemini Nano)** 📅
 *Objective: On-device summarization.*
 
 1.  **AI Integration:**
