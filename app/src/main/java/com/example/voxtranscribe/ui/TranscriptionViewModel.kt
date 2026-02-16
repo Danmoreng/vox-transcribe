@@ -3,6 +3,7 @@ package com.example.voxtranscribe.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.domain.TranscriptionRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class TranscriptionStats(
     val isOffline: Boolean = false,
@@ -19,15 +21,37 @@ data class TranscriptionStats(
     val wordCount: Int = 0
 )
 
-class TranscriptionViewModel(private val repository: TranscriptionRepository) : ViewModel() {
+@HiltViewModel
+class TranscriptionViewModel @Inject constructor(private val repository: TranscriptionRepository) : ViewModel() {
 
-    val transcriptionState: StateFlow<String> = repository.transcriptionState
+    private val _accumulatedText = MutableStateFlow("")
+    
+    val transcriptionState: StateFlow<String> = combine(
+        _accumulatedText,
+        repository.partialText
+    ) { accumulated, partial ->
+        if (partial.isEmpty()) accumulated else if (accumulated.isEmpty()) partial else "$accumulated\n$partial"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
     private val _durationSeconds = MutableStateFlow(0L)
     private var timerJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            repository.transcriptionState.collect { entry ->
+                if (entry.isFinal) {
+                    _accumulatedText.value = if (_accumulatedText.value.isEmpty()) {
+                        entry.text
+                    } else {
+                        "${_accumulatedText.value}\n${entry.text}"
+                    }
+                }
+            }
+        }
+    }
 
     val stats: StateFlow<TranscriptionStats> = combine(
         repository.isOfflineModel,
@@ -66,6 +90,7 @@ class TranscriptionViewModel(private val repository: TranscriptionRepository) : 
     }
 
     fun clearText() {
+        _accumulatedText.value = ""
         repository.clear()
         _durationSeconds.value = 0
     }

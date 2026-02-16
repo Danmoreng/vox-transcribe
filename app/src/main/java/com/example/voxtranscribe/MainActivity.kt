@@ -30,27 +30,20 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.voxtranscribe.data.AndroidSpeechRecognizerImpl
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.voxtranscribe.ui.TranscriptionViewModel
 import com.example.voxtranscribe.ui.theme.VoxTranscribeTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        val repository = AndroidSpeechRecognizerImpl(applicationContext)
-        val viewModelFactory = object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                @Suppress("UNCHECKED_CAST")
-                return TranscriptionViewModel(repository) as T
-            }
-        }
-
         setContent {
             VoxTranscribeTheme {
-                val viewModel: TranscriptionViewModel = viewModel(factory = viewModelFactory)
+                val viewModel: TranscriptionViewModel = hiltViewModel()
                 TranscriptionScreen(viewModel)
             }
         }
