@@ -7,37 +7,40 @@
 - [x] Implement `AndroidSpeechRecognizerImpl` using Android Speech API.
 - [x] Support for continuous transcription (auto-restart logic).
 - [x] Preference for on-device (offline) models with API 31+ support.
+- [x] Hilt Dependency Injection.
+- [x] Room Persistence (v2 with AI support).
 
 ### **Phase 2: UI (Jetpack Compose & Material 3)** ✅
-- [x] Main screen layout with `Scaffold`, `TopAppBar`, and `FloatingActionButton`.
-- [x] Scrollable transcription display area.
-- [x] **Statistics Bar:** Real-time display of Engine type (Online/Offline), Duration (seconds), and Word Count.
-- [x] **Actions:** Copy transcript to clipboard and Clear transcript functionality.
-- [x] Removed experimental Audio Visualizer due to performance/UX considerations.
+- [x] **Home Screen:** Dashboard for saved recordings.
+- [x] **Recording Screen:** Foreground-service-backed continuous recording.
+- [x] **Detail Screen:** Tabbed view for Transcript and AI Insights.
+- [x] **Actions:** Copy transcript, Process AI, and Delete (with confirmation).
 
-### **Phase 3: Permissions & Safety** ✅
-- [x] Manifest permissions for `RECORD_AUDIO` and `INTERNET`.
-- [x] Runtime permission handling in Compose.
+### **Phase 3: Intelligence (On-Device AI)** ✅
+- [x] Integration with ML Kit GenAI Summarization API.
+- [x] Support for Gemini Nano on compatible devices (e.g., S25).
+- [x] On-device generation of Executive Summaries and Meeting Notes.
+- [x] Mock AI fallback for development and unsupported hardware.
 
-### **Phase 4: Implementation Steps** ✅
-- [x] Project Initialization.
-- [x] Repository Layer setup.
-- [x] ViewModel implementation with state management.
-- [x] UI Skeleton and Wiring.
+### **Phase 4: Reliability & Safety** ✅
+- [x] Foreground Service for background recording.
+- [x] Confirmation dialogs for data deletion.
+- [x] Strict on-device processing for privacy.
+- [x] Safe navigation flows to prevent database-related crashes.
 
 ---
 
 ## **Next Steps**
 
-### **Phase 5: Future Integration (The C++ Part)** 🔄
-- [ ] Research and select C++ STT library (e.g., Vosk, Whisper.cpp).
-- [ ] Implement JNI Bridge.
-- [ ] Create `CppTranscriptionImpl` for full offline/custom model support.
+### **Advanced Features** 🔄
+- [ ] **Exporting:** Share transcripts or summaries as documents (.txt, .pdf).
+- [ ] **Internationalization:** Support for non-English transcription and AI processing.
+- [ ] **Search:** Implement full-text search across all saved notes.
+- [ ] **UI Polish:** Dark/Light mode refinements and animations.
 
-### **Upcoming UI Improvements**
-- [ ] Add support for multiple languages in settings.
-- [ ] Export transcript as a file (.txt, .pdf).
-- [ ] Theme customization (Dark/Light mode toggle).
+### **Long-term Research**
+- [ ] Investigate `genai-prompt` API expansion to more devices.
+- [ ] Explore C++ STT libraries (Whisper.cpp) for even higher accuracy offline.
 
 ---
-*Last Updated: February 2025*
+*Last Updated: February 16, 2026*

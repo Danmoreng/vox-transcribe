@@ -25,9 +25,7 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 *Objective: Support long-running sessions (e.g., 60min meetings) without interruption.*
 
 1.  **TranscriptionService:** ✅
-    *   Created `LifecycleService` with `startForeground`.
 2.  **The "Forever Loop" Logic:** ✅
-    *   Implemented automatic restart on timeout/silence.
 
 ---
 
@@ -42,19 +40,46 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 
 ---
 
-## **Phase 5: Intelligence (Local AI)** 🔄
+## **Phase 5: Intelligence (Local AI)** ✅
 *Objective: On-device summarization and meeting notes generation.*
 
-1.  **AI Integration:**
-    *   Integrate Google AI Edge SDK (Gemini Nano) or equivalent local LLM.
-    *   Implement `AiRepository` for model management and inference.
-2.  **Smart Generation Features:**
-    *   **Executive Summary:** A concise overview of the conversation.
-    *   **Structured Meeting Notes:** Automatic extraction of action items, key decisions, and bulleted highlights.
-3.  **Persistence & UI:**
-    *   Update `NoteEntity` schema to store `summary` and `structuredNotes`.
-    *   Add "AI Generate" triggers to the Detail Screen.
-    *   Implement a "Review" UI showing the processed insights alongside the transcript.
+1.  **AI Integration:** ✅
+    *   Integrated ML Kit GenAI Summarization API (Gemini Nano) for on-device processing.
+    *   Implemented `AiRepository` with `GeminiAiRepository` and `MockAiRepository` for testing.
+2.  **Smart Generation Features:** ✅
+    *   **Executive Summary:** A concise overview of the conversation using `ONE_BULLET` output.
+    *   **Structured Meeting Notes:** Extraction of key highlights using `THREE_BULLETS` output.
+3.  **Persistence & UI:** ✅
+    *   Updated `Note` entity to store `summary` and `structuredNotes`.
+    *   Added "AI Insights" tab to the Detail Screen.
+    *   Improved layout to accommodate action buttons below the title.
+
+---
+
+## **Phase 6: Core Feature Completion** ✅
+*Objective: Polish core functionality for daily use.*
+
+1.  **Note Deletion:** ✅
+    *   Implemented deletion in `NotesDao`, `NotesRepository`, and `ViewModels`.
+    *   Added confirmation dialogs to prevent accidental data loss.
+    *   Fixed Room/Flow lifecycle crashes during deletion from the detail view.
+2.  **UI Polish:** ✅
+    *   Refactored Detail Screen to separate title from action buttons for better clarity.
+    *   Added `HorizontalDivider` and spaced-out action row.
+
+---
+
+## **Phase 7: Polish & Advanced Features** 🔄
+*Objective: Enhance the app for power users.*
+
+1.  **Export Options:** 📅
+    *   Export as .txt or .pdf files.
+2.  **Language Support:** 📅
+    *   Allow users to select from the supported GenAI languages (English, Japanese, Korean).
+3.  **Search & Filters:** 📅
+    *   Search through transcripts and AI-generated summaries.
+4.  **Advanced AI Control:** 📅
+    *   Allow users to customize the number of bullets for summaries and notes.
 
 ---
 
