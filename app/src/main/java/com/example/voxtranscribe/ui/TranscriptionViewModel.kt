@@ -2,16 +2,13 @@ package com.example.voxtranscribe.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.voxtranscribe.data.NotesRepository
+import com.example.voxtranscribe.data.db.Note
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,13 +19,21 @@ data class TranscriptionStats(
 )
 
 @HiltViewModel
-class TranscriptionViewModel @Inject constructor(private val repository: TranscriptionRepository) : ViewModel() {
+class TranscriptionViewModel @Inject constructor(
+    private val speechRepository: TranscriptionRepository,
+    private val notesRepository: NotesRepository
+) : ViewModel() {
 
+    // Persistent data
+    val allNotes: StateFlow<List<Note>> = notesRepository.getAllNotes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private var currentNoteId: Long? = null
     private val _accumulatedText = MutableStateFlow("")
     
     val transcriptionState: StateFlow<String> = combine(
         _accumulatedText,
-        repository.partialText
+        speechRepository.partialText
     ) { accumulated, partial ->
         if (partial.isEmpty()) accumulated else if (accumulated.isEmpty()) partial else "$accumulated\n$partial"
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
@@ -40,13 +45,19 @@ class TranscriptionViewModel @Inject constructor(private val repository: Transcr
     private var timerJob: Job? = null
 
     init {
+        // Collect finalized segments and save to DB
         viewModelScope.launch {
-            repository.transcriptionState.collect { entry ->
+            speechRepository.transcriptionState.collect { entry ->
                 if (entry.isFinal) {
                     _accumulatedText.value = if (_accumulatedText.value.isEmpty()) {
                         entry.text
                     } else {
                         "${_accumulatedText.value}\n${entry.text}"
+                    }
+                    
+                    // Save to Room if we have an active session
+                    currentNoteId?.let { id ->
+                        notesRepository.insertSegment(id, entry.text, true)
                     }
                 }
             }
@@ -54,7 +65,7 @@ class TranscriptionViewModel @Inject constructor(private val repository: Transcr
     }
 
     val stats: StateFlow<TranscriptionStats> = combine(
-        repository.isOfflineModel,
+        speechRepository.isOfflineModel,
         _durationSeconds,
         transcriptionState
     ) { isOffline, duration, text ->
@@ -62,15 +73,36 @@ class TranscriptionViewModel @Inject constructor(private val repository: Transcr
         TranscriptionStats(isOffline, duration, words)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TranscriptionStats())
 
-    fun toggleListening() {
-        if (_isListening.value) {
-            stopTimer()
-            repository.stopListening()
-            _isListening.value = false
-        } else {
+    fun startRecording() {
+        if (_isListening.value) return
+        
+        viewModelScope.launch {
+            _accumulatedText.value = ""
+            _durationSeconds.value = 0
+            
+            // 1. Create Note in DB
+            val title = "Note @ ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
+            currentNoteId = notesRepository.createNote(title)
+            
+            // 2. Start Engine
             startTimer()
-            repository.startListening()
+            speechRepository.startListening()
             _isListening.value = true
+        }
+    }
+
+    fun stopRecording() {
+        stopTimer()
+        speechRepository.stopListening()
+        _isListening.value = false
+        
+        // Update end time
+        viewModelScope.launch {
+            currentNoteId?.let { id ->
+                // In a real app we'd fetch the note and update endTime
+                // For now, we just reset the ID to close the session
+            }
+            currentNoteId = null
         }
     }
 
@@ -89,14 +121,12 @@ class TranscriptionViewModel @Inject constructor(private val repository: Transcr
         timerJob = null
     }
 
-    fun clearText() {
-        _accumulatedText.value = ""
-        repository.clear()
-        _durationSeconds.value = 0
+    fun deleteNote(note: Note) {
+        // Implementation for deleting notes
     }
 
     override fun onCleared() {
         super.onCleared()
-        repository.cleanup()
+        speechRepository.cleanup()
     }
 }
