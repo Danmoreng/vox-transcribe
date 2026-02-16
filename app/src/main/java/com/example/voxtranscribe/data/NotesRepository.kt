@@ -31,5 +31,9 @@ class NotesRepository(private val notesDao: NotesDao) {
         notesDao.updateAiResults(noteId, summary, structuredNotes)
     }
 
+    suspend fun deleteNote(note: Note) {
+        notesDao.deleteNote(note)
+    }
+
     fun getNoteWithSegments(noteId: Long) = notesDao.getNoteWithSegments(noteId)
 }

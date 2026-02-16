@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -38,10 +39,45 @@ fun DetailScreen(
 ) {
     val noteDetail by viewModel.getNoteDetail(noteId).collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
+    val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
+    
     val context = LocalContext.current
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     
     var selectedTab by remember { mutableStateOf(0) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isDeleted) {
+        if (isDeleted) {
+            onNavigateBack()
+        }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Transcript") },
+            text = { Text("Are you sure you want to delete this transcript? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        noteDetail?.let {
+                            viewModel.deleteNote(it.note)
+                        }
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -50,42 +86,6 @@ fun DetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (selectedTab == 0) {
-                        IconButton(onClick = {
-                            noteDetail?.let { detail ->
-                                val fullText = detail.segments.joinToString("\n") { 
-                                    "[${timeFormatter.format(Date(it.timestamp))}] ${it.text}"
-                                }
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Note Transcript", fullText)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Transcript copied", Toast.LENGTH_SHORT).show()
-                            }
-                        }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy All")
-                        }
-                    }
-                    
-                    Button(
-                        onClick = {
-                            noteDetail?.let { detail ->
-                                val fullText = detail.segments.joinToString("\n") { it.text }
-                                viewModel.generateAiInsights(noteId, fullText)
-                            }
-                        },
-                        enabled = !isProcessing && noteDetail?.segments?.isNotEmpty() == true,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        if (isProcessing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Process AI")
-                        }
                     }
                 }
             )
@@ -107,25 +107,81 @@ fun DetailScreen(
             }
         }
     ) { padding ->
-        noteDetail?.let { detail ->
-            if (selectedTab == 0) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Action Row below the title
+            if (noteDetail != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    items(detail.segments) { segment ->
-                        TranscriptItem(segment, timeFormatter)
+                    Button(
+                        onClick = {
+                            noteDetail?.let { detail ->
+                                val fullText = detail.segments.joinToString("\n") { it.text }
+                                viewModel.generateAiInsights(noteId, fullText)
+                            }
+                        },
+                        enabled = !isProcessing && noteDetail?.segments?.isNotEmpty() == true,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Process AI", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+
+                    OutlinedIconButton(onClick = {
+                        noteDetail?.let { detail ->
+                            val fullText = detail.segments.joinToString("\n") { 
+                                "[${timeFormatter.format(Date(it.timestamp))}] ${it.text}"
+                            }
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Note Transcript", fullText)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Transcript copied", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy All")
+                    }
+
+                    OutlinedIconButton(
+                        onClick = { showDeleteDialog = true },
+                        colors = IconButtonDefaults.outlinedIconButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 }
-            } else {
-                AiInsightsView(detail.note, padding)
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             }
-        } ?: Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-            CircularProgressIndicator()
+
+            noteDetail?.let { detail ->
+                if (selectedTab == 0) {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(detail.segments) { segment ->
+                            TranscriptItem(segment, timeFormatter)
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.weight(1f)) {
+                        AiInsightsView(detail.note, PaddingValues(0.dp))
+                    }
+                }
+            } ?: Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
     }
 }
+
 
 @Composable
 fun TranscriptItem(segment: com.example.voxtranscribe.data.db.TranscriptSegment, formatter: SimpleDateFormat) {

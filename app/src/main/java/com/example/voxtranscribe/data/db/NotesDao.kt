@@ -26,9 +26,12 @@ interface NotesDao {
     @Query("UPDATE notes SET summary = :summary, structuredNotes = :structuredNotes WHERE noteId = :noteId")
     suspend fun updateAiResults(noteId: Long, summary: String?, structuredNotes: String?)
 
+    @Delete
+    suspend fun deleteNote(note: Note)
+
     @Transaction
     @Query("SELECT * FROM notes WHERE noteId = :noteId")
-    fun getNoteWithSegments(noteId: Long): Flow<NoteWithSegments>
+    fun getNoteWithSegments(noteId: Long): Flow<NoteWithSegments?>
 
     @Query("SELECT * FROM notes ORDER BY startTime DESC")
     fun getAllNotes(): Flow<List<Note>>

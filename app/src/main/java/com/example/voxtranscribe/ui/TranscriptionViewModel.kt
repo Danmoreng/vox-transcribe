@@ -136,7 +136,9 @@ class TranscriptionViewModel @Inject constructor(
     }
 
     fun deleteNote(note: Note) {
-        // Implementation for deleting notes
+        viewModelScope.launch {
+            notesRepository.deleteNote(note)
+        }
     }
 
     override fun onCleared() {

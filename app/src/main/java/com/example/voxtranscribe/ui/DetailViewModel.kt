@@ -19,6 +19,9 @@ class DetailViewModel @Inject constructor(
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
 
+    private val _isDeleted = MutableStateFlow(false)
+    val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
+
     fun getNoteDetail(noteId: Long): StateFlow<NoteWithSegments?> {
         return notesRepository.getNoteWithSegments(noteId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -44,6 +47,15 @@ class DetailViewModel @Inject constructor(
             } finally {
                 _isProcessing.value = false
             }
+        }
+    }
+
+    fun deleteNote(note: com.example.voxtranscribe.data.db.Note) {
+        viewModelScope.launch {
+            _isDeleted.value = true
+            // Give navigation time to transition away
+            kotlinx.coroutines.delay(300) 
+            notesRepository.deleteNote(note)
         }
     }
 }

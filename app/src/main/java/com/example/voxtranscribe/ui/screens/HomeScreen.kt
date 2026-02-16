@@ -4,10 +4,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +28,32 @@ fun HomeScreen(
     viewModel: TranscriptionViewModel = hiltViewModel()
 ) {
     val notes by viewModel.allNotes.collectAsStateWithLifecycle()
+    var noteToDelete by remember { mutableStateOf<Note?>(null) }
+
+    if (noteToDelete != null) {
+        val note = noteToDelete!!
+        AlertDialog(
+            onDismissRequest = { noteToDelete = null },
+            title = { Text("Delete Transcript") },
+            text = { Text("Are you sure you want to delete '${note.title}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteNote(note)
+                        noteToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { noteToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -55,7 +81,11 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(notes) { note ->
-                    NoteCard(note, onClick = { onNavigateToDetail(note.noteId) })
+                    NoteCard(
+                        note = note, 
+                        onClick = { onNavigateToDetail(note.noteId) },
+                        onDelete = { noteToDelete = note }
+                    )
                 }
             }
         }
@@ -63,21 +93,35 @@ fun HomeScreen(
 }
 
 @Composable
-fun NoteCard(note: Note, onClick: () -> Unit) {
+fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
     val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = sdf.format(Date(note.startTime)),
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = note.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = sdf.format(Date(note.startTime)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Delete, 
+                    contentDescription = "Delete Note",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }
