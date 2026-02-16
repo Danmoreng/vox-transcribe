@@ -5,7 +5,7 @@ import com.example.voxtranscribe.data.AndroidSpeechRecognizerImpl
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.ai.AiRepository
 import com.example.voxtranscribe.data.ai.MockAiRepository
-import com.example.voxtranscribe.data.ai.GeminiAiRepository
+import com.example.voxtranscribe.data.ai.MediaPipeAiRepository
 import com.example.voxtranscribe.data.db.NotesDao
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.Module
@@ -33,7 +33,7 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideAiRepository(impl: GeminiAiRepository): AiRepository {
+    fun provideAiRepository(impl: MediaPipeAiRepository): AiRepository {
         return impl
     }
 }

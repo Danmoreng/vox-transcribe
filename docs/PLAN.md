@@ -25,7 +25,7 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 *Objective: Support long-running sessions (e.g., 60min meetings) without interruption.*
 
 1.  **TranscriptionService:** ✅
-2.  **The "Forever Loop" Logic:** ✅
+2.  **The "Forever Loop" Logic:** ✅ (To be refactored into a State Machine in Phase 9)
 
 ---
 
@@ -36,23 +36,15 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 2.  **Home Screen:** ✅
 3.  **Recording Screen:** ✅
 4.  **Detail Screen:** ✅
-    *   Implemented segment-based view with timestamps and export functionality.
 
 ---
 
 ## **Phase 5: Intelligence (Local AI)** ✅
 *Objective: On-device summarization and meeting notes generation.*
 
-1.  **AI Integration:** ✅
-    *   Integrated ML Kit GenAI Summarization API (Gemini Nano) for on-device processing.
-    *   Implemented `AiRepository` with `GeminiAiRepository` and `MockAiRepository` for testing.
+1.  **AI Integration:** ✅ (ML Kit Gemini Nano)
 2.  **Smart Generation Features:** ✅
-    *   **Executive Summary:** A concise overview of the conversation using `ONE_BULLET` output.
-    *   **Structured Meeting Notes:** Extraction of key highlights using `THREE_BULLETS` output.
 3.  **Persistence & UI:** ✅
-    *   Updated `Note` entity to store `summary` and `structuredNotes`.
-    *   Added "AI Insights" tab to the Detail Screen.
-    *   Improved layout to accommodate action buttons below the title.
 
 ---
 
@@ -60,26 +52,70 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 *Objective: Polish core functionality for daily use.*
 
 1.  **Note Deletion:** ✅
-    *   Implemented deletion in `NotesDao`, `NotesRepository`, and `ViewModels`.
-    *   Added confirmation dialogs to prevent accidental data loss.
-    *   Fixed Room/Flow lifecycle crashes during deletion from the detail view.
 2.  **UI Polish:** ✅
-    *   Refactored Detail Screen to separate title from action buttons for better clarity.
-    *   Added `HorizontalDivider` and spaced-out action row.
 
 ---
 
-## **Phase 7: Polish & Advanced Features** 🔄
-*Objective: Enhance the app for power users.*
+## **Phase 7: Advanced Features & Search** 🔄
+*Objective: Enhance the app for power users with efficient search and flexible exports.*
 
-1.  **Export Options:** 📅
-    *   Export as .txt or .pdf files.
-2.  **Language Support:** 📅
-    *   Allow users to select from the supported GenAI languages (English, Japanese, Korean).
-3.  **Search & Filters:** 📅
-    *   Search through transcripts and AI-generated summaries.
-4.  **Advanced AI Control:** 📅
-    *   Allow users to customize the number of bullets for summaries and notes.
+1.  **Room FTS Integration:** 📅
+    *   Implement `@Fts4` index for transcripts and summaries.
+    *   Support fast full-text search with snippets and ranking.
+2.  **Rich Export Options:** 📅
+    *   Support **Markdown**, TXT, and PDF.
+    *   Include metadata (date, duration, AI provider).
+    *   Use Storage Access Framework for user-controlled file saving.
+3.  **Data Safety & Security:** 📅
+    *   Biometric/PIN app lock option.
+    *   Optional at-rest encryption for sensitive meeting DBs.
+    *   Data retention policies (auto-delete after N days).
+
+---
+
+## **Phase 8: MediaPipe & AI Intelligence** 🔄
+*Objective: High-performance SLM integration and smart capability management.*
+
+1.  **MediaPipe LLM Integration:** 📅
+    *   Add `com.google.mediapipe:tasks-genai`.
+    *   Implement `MediaPipeAiRepository`.
+2.  **AI Capability Gating:** 📅
+    *   Implement detection for `checkFeatureStatus()` (ML Kit) and device hardware limits (MediaPipe).
+    *   UI states: Unavailable / Downloadable / Downloading / Ready.
+    *   Fallback logic: MediaPipe → ML Kit → Mock/Disabled.
+3.  **AI Quality Guardrails:** 📅
+    *   Implement chunking strategy (map-reduce) for long transcripts (>30 mins).
+    *   Cache AI outputs and allow "Regenerate" with different parameters.
+
+---
+
+## **Phase 9: Platform & Compliance** 📅
+*Objective: Ensure production-grade reliability on modern Android versions (14+).*
+
+1.  **Foreground Service Hardening:**
+    *   Declare `FOREGROUND_SERVICE_MICROPHONE` type and handle Android 14+ requirements.
+    *   Implement "while-in-use" permission checks and background start restrictions.
+2.  **Service State Machine:**
+    *   Replace simple loops with an explicit lifecycle: `Idle → Recording → Transcribing → Paused → Error → Finalizing`.
+    *   Implement bounded retries and exponential backoff for recognizer failures.
+3.  **Resilience Mechanics:**
+    *   Crash-safe checkpoints (flush segments to Room every 30s).
+    *   Session recovery after process death.
+
+---
+
+## **Phase 10: Quality & Release Readiness** 📅
+*Objective: Validation and deployment preparation.*
+
+1.  **Comprehensive Testing:**
+    *   Unit tests for domain logic and AI repositories.
+    *   Instrumentation tests for Room migrations and FGS behavior.
+    *   Compose UI tests for critical flows.
+2.  **CI/CD Pipeline:**
+    *   Setup Lint, Detekt, and automated unit tests.
+    *   Strategy for testing on-device AI (mocking requirements).
+3.  **Play Console Compliance:**
+    *   Prepare FGS type declarations and data safety labels.
 
 ---
 
@@ -87,4 +123,4 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 - **State:** Use `StateFlow` in ViewModels, collected with `collectAsStateWithLifecycle`.
 - **Threading:** Database ops on `Dispatchers.IO`, Speech UI updates on `Dispatchers.Main`.
 - **UI:** Pure Material 3 components.
-- **AI Safety:** Ensure all processing remains strictly on-device for privacy.
+- **Privacy:** Strict on-device processing; no transcript data in logs/analytics.

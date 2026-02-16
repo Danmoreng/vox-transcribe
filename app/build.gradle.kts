@@ -52,8 +52,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.mediapipe.genai)
     implementation(libs.mlkit.genai.prompt)
-    implementation(libs.mlkit.genai.summarization)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.coroutines.guava)
 

@@ -19,11 +19,13 @@ mlkit-genai-prompt = "1.0.0-beta1"
 mlkit-genai-summarization = "1.0.0-beta1"
 coroutines-play-services = "1.9.0"
 coroutines-guava = "1.9.0"
+mediapipe-genai = "0.10.32"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+mediapipe-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipe-genai" }
 mlkit-genai-prompt = { group = "com.google.mlkit", name = "genai-prompt", version.ref = "mlkit-genai-prompt" }
 mlkit-genai-summarization = { group = "com.google.mlkit", name = "genai-summarization", version.ref = "mlkit-genai-summarization" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines-play-services" }
