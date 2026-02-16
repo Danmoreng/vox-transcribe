@@ -10,8 +10,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -25,9 +23,6 @@ class TranscriptionViewModel(private val repository: TranscriptionRepository) : 
 
     val transcriptionState: StateFlow<String> = repository.transcriptionState
     
-    private val _amplitudes = MutableStateFlow<List<Float>>(emptyList())
-    val amplitudes: StateFlow<List<Float>> = _amplitudes.asStateFlow()
-
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
@@ -42,14 +37,6 @@ class TranscriptionViewModel(private val repository: TranscriptionRepository) : 
         val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
         TranscriptionStats(isOffline, duration, words)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TranscriptionStats())
-
-    init {
-        repository.amplitudeState
-            .onEach { amplitude ->
-                _amplitudes.value = (_amplitudes.value + amplitude).takeLast(50)
-            }
-            .launchIn(viewModelScope)
-    }
 
     fun toggleListening() {
         if (_isListening.value) {

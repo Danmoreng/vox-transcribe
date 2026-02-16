@@ -29,9 +29,6 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
     private val _transcriptionState = MutableStateFlow("")
     override val transcriptionState: StateFlow<String> = _transcriptionState.asStateFlow()
 
-    private val _amplitudeState = MutableStateFlow(0f)
-    override val amplitudeState: StateFlow<Float> = _amplitudeState.asStateFlow()
-
     private var isActive = false
     private var accumulatedText = ""
 
@@ -71,10 +68,7 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
     
     override fun onBeginningOfSpeech() {}
     
-    override fun onRmsChanged(rmsdB: Float) {
-        val normalized = ((rmsdB + 2) / 12).coerceIn(0f, 1f)
-        _amplitudeState.value = normalized
-    }
+    override fun onRmsChanged(rmsdB: Float) {}
     
     override fun onBufferReceived(buffer: ByteArray?) {}
     
@@ -85,7 +79,6 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
     override fun onError(error: Int) {
         Log.e("SpeechRecognizer", "Error: $error")
         if (isActive) {
-            // Restart listening on timeout or no match errors to simulate continuous mode
             speechRecognizer.startListening(recognizerIntent)
         }
     }
@@ -99,7 +92,6 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
         }
         
         if (isActive) {
-            // Restart for continuous transcription
             speechRecognizer.startListening(recognizerIntent)
         }
     }

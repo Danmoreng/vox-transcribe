@@ -33,7 +33,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.voxtranscribe.data.AndroidSpeechRecognizerImpl
 import com.example.voxtranscribe.ui.TranscriptionViewModel
-import com.example.voxtranscribe.ui.components.AudioVisualizer
 import com.example.voxtranscribe.ui.theme.VoxTranscribeTheme
 
 class MainActivity : ComponentActivity() {
@@ -63,7 +62,6 @@ class MainActivity : ComponentActivity() {
 fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
     val transcription by viewModel.transcriptionState.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
-    val amplitudes by viewModel.amplitudes.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -155,16 +153,6 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                     text = if (transcription.isEmpty()) "Start speaking to see transcription..." else transcription,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (transcription.isEmpty()) Color.Gray else MaterialTheme.colorScheme.onSurface
-                )
-            }
-            
-            if (isListening) {
-                AudioVisualizer(
-                    amplitudes = amplitudes,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .padding(vertical = 12.dp)
                 )
             }
         }
