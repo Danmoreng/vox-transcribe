@@ -2,10 +2,12 @@ package com.example.voxtranscribe.data
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +15,16 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionRepository, RecognitionListener {
 
-    private val speechRecognizer: SpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    private val _isOfflineModel = MutableStateFlow(false)
+    override val isOfflineModel: StateFlow<Boolean> = _isOfflineModel.asStateFlow()
+
+    private val speechRecognizer: SpeechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+        _isOfflineModel.value = true
+        SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+    } else {
+        _isOfflineModel.value = false
+        SpeechRecognizer.createSpeechRecognizer(context)
+    }
     
     private val _transcriptionState = MutableStateFlow("")
     override val transcriptionState: StateFlow<String> = _transcriptionState.asStateFlow()
@@ -21,50 +32,83 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
     private val _amplitudeState = MutableStateFlow(0f)
     override val amplitudeState: StateFlow<Float> = _amplitudeState.asStateFlow()
 
+    private var isActive = false
+    private var accumulatedText = ""
+
     private val recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        }
     }
 
     override fun startListening() {
+        isActive = true
         speechRecognizer.setRecognitionListener(this)
         speechRecognizer.startListening(recognizerIntent)
     }
 
     override fun stopListening() {
+        isActive = false
         speechRecognizer.stopListening()
     }
 
+    override fun clear() {
+        accumulatedText = ""
+        _transcriptionState.value = ""
+    }
+
     override fun cleanup() {
+        isActive = false
         speechRecognizer.destroy()
     }
 
     // RecognitionListener callbacks
-    override fun onReadyForSpeech(params: Bundle?) {}
+    override fun onReadyForSpeech(params: Bundle?) {
+        Log.d("SpeechRecognizer", "Ready for speech")
+    }
+    
     override fun onBeginningOfSpeech() {}
+    
     override fun onRmsChanged(rmsdB: Float) {
-        // Convert rmsdB to a 0-1.0 range for the visualizer.
-        // rmsdB typically ranges from -2 to 10 or so.
         val normalized = ((rmsdB + 2) / 12).coerceIn(0f, 1f)
         _amplitudeState.value = normalized
     }
+    
     override fun onBufferReceived(buffer: ByteArray?) {}
-    override fun onEndOfSpeech() {}
+    
+    override fun onEndOfSpeech() {
+        Log.d("SpeechRecognizer", "End of speech")
+    }
+    
     override fun onError(error: Int) {
-        // Handle errors as needed for v1
+        Log.e("SpeechRecognizer", "Error: $error")
+        if (isActive) {
+            // Restart listening on timeout or no match errors to simulate continuous mode
+            speechRecognizer.startListening(recognizerIntent)
+        }
     }
 
     override fun onResults(results: Bundle?) {
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (!matches.isNullOrEmpty()) {
-            _transcriptionState.value = matches[0]
+            val newText = matches[0]
+            accumulatedText = if (accumulatedText.isEmpty()) newText else "$accumulatedText $newText"
+            _transcriptionState.value = accumulatedText
+        }
+        
+        if (isActive) {
+            // Restart for continuous transcription
+            speechRecognizer.startListening(recognizerIntent)
         }
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (!matches.isNullOrEmpty()) {
-            _transcriptionState.value = matches[0]
+            val partial = matches[0]
+            _transcriptionState.value = if (accumulatedText.isEmpty()) partial else "$accumulatedText $partial"
         }
     }
 
