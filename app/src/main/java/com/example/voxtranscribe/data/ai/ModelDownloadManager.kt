@@ -50,7 +50,7 @@ class ModelDownloadManager @Inject constructor(
 
             val request = DownloadManager.Request(Uri.parse(modelUrl))
                 .setTitle("Downloading AI Model")
-                .setDescription("Gemma 3n for VoxNotes")
+                .setDescription("Gemma 3n for Vox Transcribe")
                 .addRequestHeader("Authorization", "Bearer REPLACE_WITH_YOUR_TOKEN")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, modelName)

@@ -1,8 +1,8 @@
-# VoxNotes - Private Offline Meeting Assistant
+# Vox Transcribe - Private Offline Meeting Assistant
 
-VoxNotes is a privacy-first, offline-only Android application designed to transcribe and summarize meetings entirely on your device. By leveraging local AI models (Voxtral for transcription and Gemma/Gemini Nano for summarization), VoxNotes ensures your conversations never leave your phone.
+Vox Transcribe is a privacy-first, offline-only Android application designed to transcribe and summarize meetings entirely on your device. By leveraging local AI models (Voxtral for transcription and Gemma/Gemini Nano for summarization), Vox Transcribe ensures your conversations never leave your phone.
 
-## 🚀 Features
+## Features
 
 *   **Offline Transcription**: High-fidelity speech-to-text using the **Voxtral** engine (C++ port of Mistral's model) running locally via NDK/JNI.
 *   **AI Summarization**: Generate executive summaries and action items using on-device LLMs (MediaPipe GenAI / ML Kit).
@@ -10,7 +10,7 @@ VoxNotes is a privacy-first, offline-only Android application designed to transc
 *   **Background Recording**: Reliable long-form recording using a Foreground Service.
 *   **Modern UI**: Built with Jetpack Compose and Material 3.
 
-## 🛠️ Architecture
+## Architecture
 
 *   **Language**: Kotlin
 *   **UI Toolkit**: Jetpack Compose
@@ -19,7 +19,7 @@ VoxNotes is a privacy-first, offline-only Android application designed to transc
 *   **Transcription Engine**: Custom C++ integration of [voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (GGML/GGUF based).
 *   **AI Engine**: MediaPipe GenAI / Google ML Kit.
 
-## ⚡ Setup & Installation
+## Setup & Installation
 
 ### Prerequisites
 *   Android Studio Ladybug or newer.
@@ -53,12 +53,12 @@ The app requires a GGUF model file to function. This file is not bundled due to 
     *   Wait ~30 seconds for the model to load into RAM (Status: **"Ready"**).
 5.  **Record**: Go back to Home and tap "New Recording".
 
-## 🤝 Acknowledgements
+## Acknowledgements
 
 *   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp)
 *   **GGML**: [ggml-org/ggml](https://github.com/ggml-org/ggml)
 *   **Mistral AI**: Creators of the original Voxtral model.
 
-## 📄 License
+## License
 
 MIT License. See `LICENSE` for details.

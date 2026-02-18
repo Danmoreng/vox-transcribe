@@ -1,7 +1,7 @@
-# VoxNotes - Detailed Development Plan
+# Vox Transcribe - Detailed Development Plan
 
 ## **Architectural Vision**
-VoxNotes is evolving from a single-screen prototype to a robust, offline-first meeting logger. The architecture follows Clean Architecture principles with Hilt for DI, Room for persistence, and a Foreground Service for mission-critical reliability.
+Vox Transcribe is evolving from a single-screen prototype to a robust, offline-first meeting logger. The architecture follows Clean Architecture principles with Hilt for DI, Room for persistence, and a Foreground Service for mission-critical reliability.
 
 ---
 

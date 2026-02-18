@@ -43,7 +43,7 @@ class TranscriptionService : LifecycleService() {
     }
 
     private fun startForegroundService() {
-        val notification = createNotification("VoxNotes is listening...")
+        val notification = createNotification("Vox Transcribe is listening...")
         startForeground(NOTIFICATION_ID, notification)
         
         lifecycleScope.launch {
@@ -64,7 +64,7 @@ class TranscriptionService : LifecycleService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("VoxNotes Recording")
+            .setContentTitle("Vox Transcribe Recording")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.presence_audio_busy) // Using system icon for now
             .setContentIntent(pendingIntent)

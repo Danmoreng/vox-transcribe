@@ -60,7 +60,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VoxNotes") },
+                title = { Text("Vox Transcribe") },
                 actions = {
                     IconButton(onClick = onNavigateToVoxtral) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
