@@ -66,7 +66,7 @@ Vox Transcribe is evolving from a single-screen prototype to a robust, offline-f
 2.  **Model Management:** ✅
     *   Implement logic to download the GGUF model (~2.5GB, Q4_0 quantization) to app-private storage.
     *   Ensure the model file is *not* bundled in the APK.
-3.  **Streaming Pipeline:** 🔄
+3.  **Streaming Pipeline:** ✅
     *   Implement `AudioRecord` setup for 16-bit PCM, 16kHz audio.
     *   Create a buffering mechanism to feed audio in 80ms chunks to the C++ engine.
     *   Handle partial results and finalized segments for real-time UI updates.
