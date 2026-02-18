@@ -17,7 +17,7 @@ interface TranscriptionRepository {
     val isOfflineModel: StateFlow<Boolean>
     
     fun startListening()
-    fun stopListening()
+    suspend fun stopListening()
     fun clear()
     fun cleanup()
 }

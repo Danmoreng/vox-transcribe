@@ -60,7 +60,7 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
         speechRecognizer?.startListening(recognizerIntent)
     }
 
-    override fun stopListening() {
+    override suspend fun stopListening() {
         isActive = false
         speechRecognizer?.stopListening()
     }

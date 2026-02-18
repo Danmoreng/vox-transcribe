@@ -32,7 +32,6 @@ class TranscriptionViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    // Persistent data
     val allNotes: StateFlow<List<Note>> = notesRepository.getAllNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -53,7 +52,8 @@ class TranscriptionViewModel @Inject constructor(
     private var timerJob: Job? = null
 
     init {
-        // Collect finalized segments and save to DB
+        // Collect finalized segments for UI display ONLY
+        // Persistence is handled by TranscriptionService to ensure reliability even if UI is closed
         viewModelScope.launch {
             speechRepository.transcriptionState.collect { entry ->
                 if (entry.isFinal) {
@@ -61,11 +61,6 @@ class TranscriptionViewModel @Inject constructor(
                         entry.text
                     } else {
                         "${_accumulatedText.value}\n${entry.text}"
-                    }
-                    
-                    // Save to Room if we have an active session
-                    currentNoteId?.let { id ->
-                        notesRepository.insertSegment(id, entry.text, true)
                     }
                 }
             }
@@ -92,9 +87,10 @@ class TranscriptionViewModel @Inject constructor(
             val title = "Note @ ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"
             currentNoteId = notesRepository.createNote(title)
             
-            // 2. Start Service
+            // 2. Start Service with Note ID
             val intent = Intent(context, TranscriptionService::class.java).apply {
                 action = TranscriptionService.ACTION_START
+                putExtra(TranscriptionService.EXTRA_NOTE_ID, currentNoteId)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -117,7 +113,7 @@ class TranscriptionViewModel @Inject constructor(
         context.startService(intent)
         
         _isListening.value = false
-        currentNoteId = null
+        // Keep currentNoteId for navigation/reference if needed, but session is done
     }
 
     private fun startTimer() {
@@ -143,6 +139,6 @@ class TranscriptionViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        speechRepository.cleanup()
+        // Don't cleanup repository here, service might be using it or we might want to keep model loaded
     }
 }

@@ -36,7 +36,8 @@ class VoxtralTranscriptionRepository @Inject constructor(
     private var handle: Long = 0
     private val audioRecorder = AudioRecorder()
 
-    private val _transcriptionState = MutableSharedFlow<LogEntry>()
+    // replay=1 ensures the service receives the final event even if it connects late/reconnects
+    private val _transcriptionState = MutableSharedFlow<LogEntry>(replay = 1)
     override val transcriptionState: SharedFlow<LogEntry> = _transcriptionState.asSharedFlow()
 
     private val _partialText = MutableStateFlow("")
@@ -53,7 +54,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
     private val CHUNK_DURATION_SEC = 2 
     private val MIN_SAMPLES = SAMPLE_RATE * CHUNK_DURATION_SEC
     
-    // We recreate the channel on every start to avoid closed-channel issues on restart
     private var audioQueue: Channel<FloatArray>? = null
 
     fun loadModel() {
@@ -100,7 +100,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
         Log.d(TAG, "Starting listening...")
         audioRecorder.startRecording()
         
-        // Reset jobs and queue
         transcriptionJob?.cancel()
         processJob?.cancel()
         
@@ -117,7 +116,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
             Log.d(TAG, "Transcription consumer started")
             val accumulator = ArrayList<Float>(MIN_SAMPLES * 2)
             
-            // Loop until channel is closed
             val queue = audioQueue ?: return@launch
             for (chunk in queue) {
                 for (sample in chunk) {
@@ -163,7 +161,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
             
             if (text.isNotEmpty()) {
                 Log.i(TAG, "Transcribed: $text")
-                _partialText.emit(text)
+                // _partialText.emit(text) // Removed to avoid duplication as we emit final immediately
                 
                 _transcriptionState.emit(
                     LogEntry(
@@ -176,7 +174,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 Log.d(TAG, "Transcription returned empty string")
             }
         } catch (e: Exception) {
-            // If job is cancelled, we might see it here. Log but don't crash.
             Log.e(TAG, "Error during transcription: ${e.message}")
         }
     }
@@ -207,25 +204,22 @@ class VoxtralTranscriptionRepository @Inject constructor(
         }
     }
 
-    override fun stopListening() {
+    override suspend fun stopListening() {
         Log.d(TAG, "Stopping listening...")
         
-        // 1. Stop recording (producer source)
         audioRecorder.stopRecording()
         
-        // 2. Stop producer job
         transcriptionJob?.cancel()
         transcriptionJob = null
         
-        // 3. Close channel to signal consumer to finish and flush
+        // Signal consumer to finish
         audioQueue?.close()
         
-        // 4. Do NOT cancel processJob immediately. Let it drain.
-        // It will complete when the channel is empty.
-        // However, if we start again immediately, startListening cancels processJob.
-        // That is acceptable (race condition on rapid toggle).
-        
-        // Note: processJob remains non-null until next start or explicit cleanup
+        // Wait for consumer to finish flushing
+        Log.d(TAG, "Waiting for processJob to finish flushing...")
+        processJob?.join()
+        Log.d(TAG, "processJob finished.")
+        processJob = null
     }
 
     override fun clear() {
@@ -233,7 +227,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
     }
     
     override fun cleanup() {
-        processJob?.cancel() // Force stop on cleanup
+        processJob?.cancel()
         if (handle != 0L) {
             voxtralJni.free(handle)
             handle = 0
