@@ -56,22 +56,22 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 
 ---
 
-## **Phase 7: Voxtral Transcription Engine (C++ Port)** 📅
+## **Phase 7: Voxtral Transcription Engine (C++ Port)** 🔄
 *Objective: Integrate `voxtral.cpp` for high-fidelity, offline, private transcription.*
 
-1.  **NDK & JNI Scaffolding:**
+1.  **NDK & JNI Scaffolding:** ✅
     *   Compile `voxtral.cpp` (libvoxtral) as a shared library (`.so`) for `arm64-v8a`.
     *   Create a JNI wrapper to expose core functions (init, process_chunk, finalize) to Kotlin.
     *   Verify numerical parity with reference implementation.
-2.  **Model Management:**
+2.  **Model Management:** ✅
     *   Implement logic to download the GGUF model (~2.5GB, Q4_0 quantization) to app-private storage.
     *   Ensure the model file is *not* bundled in the APK.
-3.  **Streaming Pipeline:**
+3.  **Streaming Pipeline:** 🔄
     *   Implement `AudioRecord` setup for 16-bit PCM, 16kHz audio.
     *   Create a buffering mechanism to feed audio in 80ms chunks to the C++ engine.
     *   Handle partial results and finalized segments for real-time UI updates.
     *   Target parameters: `temperature=0.0`, `transcription_delay_ms=480`.
-4.  **Hardware Acceleration (Iterative):**
+4.  **Hardware Acceleration (Iterative):** 📅
     *   **Stage 1 (CPU):** Focus on correctness and stability on CPU first.
     *   **Stage 2 (Vulkan):** Attempt to enable `GGML_VULKAN` for GPU acceleration on supported devices.
     *   **Stage 3 (NPU):** Treat as a research track (NNAPI/QNN).

@@ -28,6 +28,14 @@
 - [x] Strict on-device processing for privacy.
 - [x] Safe navigation flows to prevent database-related crashes.
 
+### **Phase 5: Voxtral Native Integration (C++ Port)** 🔄
+- [x] **Native Build:** Integrated `voxtral.cpp` and `ggml` via CMake and NDK.
+- [x] **JNI Bridge:** Implemented `VoxtralJni` for Kotlin-C++ communication.
+- [x] **Model Management:** UI for importing GGUF models (`VoxtralModelScreen`).
+- [x] **Repository Layer:** Replaced `AndroidSpeechRecognizerImpl` with `VoxtralTranscriptionRepository`.
+- [ ] **Streaming:** Full context-aware streaming implementation (currently chunked).
+- [ ] **Hardware Acceleration:** Vulkan/GPU support.
+
 ---
 
 ## **Next Steps**
@@ -43,4 +51,4 @@
 - [ ] Explore C++ STT libraries (Whisper.cpp) for even higher accuracy offline.
 
 ---
-*Last Updated: February 16, 2026*
+*Last Updated: February 18, 2026*

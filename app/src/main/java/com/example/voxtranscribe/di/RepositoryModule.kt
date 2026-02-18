@@ -3,6 +3,7 @@ package com.example.voxtranscribe.di
 import android.content.Context
 import com.example.voxtranscribe.data.AndroidSpeechRecognizerImpl
 import com.example.voxtranscribe.data.NotesRepository
+import com.example.voxtranscribe.data.VoxtralTranscriptionRepository
 import com.example.voxtranscribe.data.ai.AiRepository
 import com.example.voxtranscribe.data.ai.MockAiRepository
 import com.example.voxtranscribe.data.ai.MediaPipeAiRepository
@@ -21,8 +22,10 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideTranscriptionRepository(@ApplicationContext context: Context): TranscriptionRepository {
-        return AndroidSpeechRecognizerImpl(context)
+    fun provideTranscriptionRepository(
+        voxtralRepo: VoxtralTranscriptionRepository
+    ): TranscriptionRepository {
+        return voxtralRepo
     }
 
     @Provides

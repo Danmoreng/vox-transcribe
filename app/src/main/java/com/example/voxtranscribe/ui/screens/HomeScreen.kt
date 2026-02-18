@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import java.util.*
 fun HomeScreen(
     onNavigateToRecord: () -> Unit,
     onNavigateToDetail: (Long) -> Unit,
+    onNavigateToVoxtral: () -> Unit,
     viewModel: TranscriptionViewModel = hiltViewModel()
 ) {
     val notes by viewModel.allNotes.collectAsStateWithLifecycle()
@@ -57,7 +59,14 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("VoxNotes") })
+            TopAppBar(
+                title = { Text("VoxNotes") },
+                actions = {
+                    IconButton(onClick = onNavigateToVoxtral) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
+            )
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -125,4 +134,3 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
         }
     }
 }
-
