@@ -56,20 +56,25 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 
 ---
 
-## **Phase 7: Advanced Features & Search** 🔄
-*Objective: Enhance the app for power users with efficient search and flexible exports.*
+## **Phase 7: Voxtral Transcription Engine (C++ Port)** 📅
+*Objective: Integrate `voxtral.cpp` for high-fidelity, offline, private transcription.*
 
-1.  **Room FTS Integration:** 📅
-    *   Implement `@Fts4` index for transcripts and summaries.
-    *   Support fast full-text search with snippets and ranking.
-2.  **Rich Export Options:** 📅
-    *   Support **Markdown**, TXT, and PDF.
-    *   Include metadata (date, duration, AI provider).
-    *   Use Storage Access Framework for user-controlled file saving.
-3.  **Data Safety & Security:** 📅
-    *   Biometric/PIN app lock option.
-    *   Optional at-rest encryption for sensitive meeting DBs.
-    *   Data retention policies (auto-delete after N days).
+1.  **NDK & JNI Scaffolding:**
+    *   Compile `voxtral.cpp` (libvoxtral) as a shared library (`.so`) for `arm64-v8a`.
+    *   Create a JNI wrapper to expose core functions (init, process_chunk, finalize) to Kotlin.
+    *   Verify numerical parity with reference implementation.
+2.  **Model Management:**
+    *   Implement logic to download the GGUF model (~2.5GB, Q4_0 quantization) to app-private storage.
+    *   Ensure the model file is *not* bundled in the APK.
+3.  **Streaming Pipeline:**
+    *   Implement `AudioRecord` setup for 16-bit PCM, 16kHz audio.
+    *   Create a buffering mechanism to feed audio in 80ms chunks to the C++ engine.
+    *   Handle partial results and finalized segments for real-time UI updates.
+    *   Target parameters: `temperature=0.0`, `transcription_delay_ms=480`.
+4.  **Hardware Acceleration (Iterative):**
+    *   **Stage 1 (CPU):** Focus on correctness and stability on CPU first.
+    *   **Stage 2 (Vulkan):** Attempt to enable `GGML_VULKAN` for GPU acceleration on supported devices.
+    *   **Stage 3 (NPU):** Treat as a research track (NNAPI/QNN).
 
 ---
 
@@ -104,7 +109,24 @@ VoxNotes is evolving from a single-screen prototype to a robust, offline-first m
 
 ---
 
-## **Phase 10: Quality & Release Readiness** 📅
+## **Phase 10: Advanced Features & Search** 🔄
+*Objective: Enhance the app for power users with efficient search and flexible exports.*
+
+1.  **Room FTS Integration:** 📅
+    *   Implement `@Fts4` index for transcripts and summaries.
+    *   Support fast full-text search with snippets and ranking.
+2.  **Rich Export Options:** 📅
+    *   Support **Markdown**, TXT, and PDF.
+    *   Include metadata (date, duration, AI provider).
+    *   Use Storage Access Framework for user-controlled file saving.
+3.  **Data Safety & Security:** 📅
+    *   Biometric/PIN app lock option.
+    *   Optional at-rest encryption for sensitive meeting DBs.
+    *   Data retention policies (auto-delete after N days).
+
+---
+
+## **Phase 11: Quality & Release Readiness** 📅
 *Objective: Validation and deployment preparation.*
 
 1.  **Comprehensive Testing:**
