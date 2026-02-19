@@ -36,6 +36,7 @@ fun RecordingScreen(
     val transcription by viewModel.transcriptionState.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
+    val engineState by viewModel.engineState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -48,6 +49,13 @@ fun RecordingScreen(
 
         if (audioGranted && notificationGranted) {
             viewModel.startRecording()
+        }
+    }
+    
+    // Show toast when engine becomes ready
+    LaunchedEffect(engineState) {
+        if (engineState == com.example.voxtranscribe.data.EngineState.Ready) {
+            Toast.makeText(context, "Engine Loaded - Ready to Record", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -97,12 +105,21 @@ fun RecordingScreen(
                         permissionLauncher.launch(permissions.toTypedArray())
                     }
                 },
-                containerColor = if (isListening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+                containerColor = if (isListening) MaterialTheme.colorScheme.errorContainer else 
+                                 if (engineState == com.example.voxtranscribe.data.EngineState.Ready) MaterialTheme.colorScheme.primaryContainer else Color.Gray
             ) {
-                Icon(
-                    imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
-                    contentDescription = if (isListening) "Stop" else "Start"
-                )
+                if (engineState == com.example.voxtranscribe.data.EngineState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
+                        contentDescription = if (isListening) "Stop" else "Start"
+                    )
+                }
             }
         },
         floatingActionButtonPosition = FabPosition.Center

@@ -16,14 +16,12 @@ struct VoxtralHandle {
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_example_voxtranscribe_data_VoxtralJni_init(JNIEnv *env, jobject thiz, jstring modelPath, jint threads) {
+Java_com_example_voxtranscribe_data_VoxtralJni_init(JNIEnv *env, jobject thiz, jstring modelPath, jint threads, jint gpuBackend, jint kvWindow) {
     const char *path = env->GetStringUTFChars(modelPath, nullptr);
     std::string pathStr(path);
     env->ReleaseStringUTFChars(modelPath, path);
 
     // Lambda for logging
-    // Note: We need a way to pass this lambda to C function pointer if expected, 
-    // but voxtral_log_callback is std::function, so capturing lambda works.
     auto logger = [](voxtral_log_level level, const std::string & msg) {
         if (level == voxtral_log_level::error) {
             LOGE("Voxtral: %s", msg.c_str());
@@ -32,8 +30,10 @@ Java_com_example_voxtranscribe_data_VoxtralJni_init(JNIEnv *env, jobject thiz, j
         }
     };
 
-    LOGI("Loading model from %s", pathStr.c_str());
-    voxtral_model *model = voxtral_model_load_from_file(pathStr, logger, voxtral_gpu_backend::none);
+    voxtral_gpu_backend backend = static_cast<voxtral_gpu_backend>(gpuBackend);
+
+    LOGI("Loading model from %s (GPU backend: %d, KV window: %d)", pathStr.c_str(), gpuBackend, kvWindow);
+    voxtral_model *model = voxtral_model_load_from_file(pathStr, logger, backend);
     if (!model) {
         LOGE("Failed to load model from %s", pathStr.c_str());
         return 0;
@@ -41,9 +41,10 @@ Java_com_example_voxtranscribe_data_VoxtralJni_init(JNIEnv *env, jobject thiz, j
 
     voxtral_context_params params;
     params.n_threads = threads;
+    params.kv_window_override = kvWindow;
     params.log_level = voxtral_log_level::info;
     params.logger = logger;
-    params.gpu = voxtral_gpu_backend::none;
+    params.gpu = backend;
 
     voxtral_context *ctx = voxtral_init_from_model(model, params);
     if (!ctx) {
@@ -102,6 +103,67 @@ Java_com_example_voxtranscribe_data_VoxtralJni_transcribe(JNIEnv *env, jobject t
     }
     
     return env->NewStringUTF(result.text.c_str());
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject thiz, jlong ctxPtr) {
+    if (ctxPtr == 0) return 0;
+    VoxtralHandle *handle = reinterpret_cast<VoxtralHandle *>(ctxPtr);
+    
+    voxtral_stream_params params; // use defaults
+    voxtral_stream *stream = voxtral_stream_create(handle->ctx, params);
+    
+    if (!stream) {
+        LOGE("Failed to create stream");
+        return 0;
+    }
+    
+    return reinterpret_cast<jlong>(stream);
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamFree(JNIEnv *env, jobject thiz, jlong streamPtr) {
+    if (streamPtr == 0) return;
+    voxtral_stream *stream = reinterpret_cast<voxtral_stream *>(streamPtr);
+    voxtral_stream_free(stream);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamPush(JNIEnv *env, jobject thiz, jlong streamPtr, jfloatArray audioData) {
+    if (streamPtr == 0) return false;
+    voxtral_stream *stream = reinterpret_cast<voxtral_stream *>(streamPtr);
+    
+    jsize len = env->GetArrayLength(audioData);
+    jfloat *body = env->GetFloatArrayElements(audioData, 0);
+    
+    bool success = voxtral_stream_push_pcm(stream, body, len);
+    
+    env->ReleaseFloatArrayElements(audioData, body, 0);
+    return success;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamDecode(JNIEnv *env, jobject thiz, jlong streamPtr) {
+    if (streamPtr == 0) return env->NewStringUTF("");
+    voxtral_stream *stream = reinterpret_cast<voxtral_stream *>(streamPtr);
+    
+    voxtral_result result;
+    if (voxtral_stream_decode(stream, result)) {
+        return env->NewStringUTF(result.text.c_str());
+    }
+    return env->NewStringUTF("");
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamFlush(JNIEnv *env, jobject thiz, jlong streamPtr) {
+    if (streamPtr == 0) return env->NewStringUTF("");
+    voxtral_stream *stream = reinterpret_cast<voxtral_stream *>(streamPtr);
+    
+    voxtral_result result;
+    if (voxtral_stream_flush(stream, result)) {
+        return env->NewStringUTF(result.text.c_str());
+    }
+    return env->NewStringUTF("");
 }
 
 } // extern "C"

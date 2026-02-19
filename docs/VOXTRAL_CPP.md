@@ -230,7 +230,8 @@ If you tell me your \*\*target devices\*\* (e.g., “Snapdragon 8 Gen 2+ only”
 
 
 
-\[1]: https://github.com/andrijdavid/voxtral.cpp "GitHub - andrijdavid/voxtral.cpp: Port of Mistral's Voxtral model in C/C++"
+\[1]: https://github.com/Danmoreng/voxtral.cpp "GitHub - Danmoreng/voxtral.cpp: Port of Mistral's Voxtral model in C/C++ (Forked for Android fixes)"
+[9]: https://github.com/andrijdavid/voxtral.cpp "Original Voxtral C++ implementation"
 
 \[2]: https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-2602?utm\_source=chatgpt.com "mistralai/Voxtral-Mini-4B-Realtime-2602 · Hugging Face"
 

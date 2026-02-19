@@ -16,7 +16,7 @@ Vox Transcribe is a privacy-first, offline-only Android application designed to 
 *   **UI Toolkit**: Jetpack Compose
 *   **DI**: Hilt
 *   **Persistence**: Room Database
-*   **Transcription Engine**: Custom C++ integration of [voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (GGML/GGUF based).
+*   **Transcription Engine**: Custom C++ integration of [voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp) (GGML/GGUF based).
 *   **AI Engine**: MediaPipe GenAI / Google ML Kit.
 
 ## Setup & Installation
@@ -55,7 +55,7 @@ The app requires a GGUF model file to function. This file is not bundled due to 
 
 ## Acknowledgements
 
-*   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp)
+*   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (Forked for Tier 1 Android optimizations at [Danmoreng/voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp), branch `android-tier1-kv-opencl`. Includes internal Android KV-cache optimizations.)
 *   **GGML**: [ggml-org/ggml](https://github.com/ggml-org/ggml)
 *   **Mistral AI**: Creators of the original Voxtral model.
 

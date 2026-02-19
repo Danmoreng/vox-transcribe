@@ -35,6 +35,9 @@ class VoxtralModelViewModel @Inject constructor(
 
     init {
         checkModelStatus()
+        if (_isModelAvailable.value) {
+            loadEngine()
+        }
     }
 
     fun checkModelStatus() {
@@ -52,6 +55,7 @@ class VoxtralModelViewModel @Inject constructor(
             if (success) {
                 _copyResult.value = "Model imported successfully!"
                 checkModelStatus()
+                loadEngine()
             } else {
                 _copyResult.value = "Failed to copy model."
             }

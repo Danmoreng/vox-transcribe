@@ -6,6 +6,9 @@ project("voxtranscribe")
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(VOXTRAL_AUTO_DETECT_OPENCL OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+set(GGML_VULKAN ON CACHE BOOL "" FORCE)
 
 # Disable native optimizations that might break on ARM (e.g. -march=native)
 set(VOXTRAL_NATIVE_OPT OFF CACHE BOOL "" FORCE)
@@ -17,6 +20,12 @@ set(VOXTRAL_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 # Force standard O3 optimization, avoid Ofast/ffast-math if they are causing issues
 add_compile_options(-O3 -fno-fast-math)
 
+# Force Vulkan to use dynamic dispatch (no static prototypes)
+add_compile_definitions(VK_NO_PROTOTYPES)
+
+# Include directories for voxtral (and submodules)
+include_directories(../../../../external/vulkan-headers)
+
 # Add ggml submodule
 add_subdirectory(../../../../external/voxtral/ggml ggml_build)
 
@@ -25,7 +34,6 @@ add_library(voxtral_lib STATIC
     ../../../../external/voxtral/src/voxtral.cpp
 )
 
-# Include directories for voxtral
 target_include_directories(voxtral_lib PUBLIC
     ../../../../external/voxtral/include
 )

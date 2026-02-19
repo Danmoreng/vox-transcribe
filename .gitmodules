@@ -1,0 +1,7 @@
+[submodule "external/voxtral"]
+	path = external/voxtral
+	url = https://github.com/Danmoreng/voxtral.cpp
+	branch = android-tier1-kv-opencl
+[submodule "external/vulkan-headers"]
+	path = external/vulkan-headers
+	url = https://github.com/KhronosGroup/Vulkan-Hpp.git

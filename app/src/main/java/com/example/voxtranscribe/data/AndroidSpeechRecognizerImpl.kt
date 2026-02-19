@@ -31,6 +31,8 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
     private val _partialText = MutableStateFlow("")
     override val partialText: StateFlow<String> = _partialText.asStateFlow()
 
+    override val engineState: StateFlow<EngineState> = MutableStateFlow(EngineState.Ready).asStateFlow()
+
     private var isActive = false
 
     private val recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {

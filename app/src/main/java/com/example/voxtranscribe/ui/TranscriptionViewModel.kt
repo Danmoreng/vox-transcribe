@@ -50,6 +50,8 @@ class TranscriptionViewModel @Inject constructor(
 
     private val _durationSeconds = MutableStateFlow(0L)
     private var timerJob: Job? = null
+    
+    val engineState = speechRepository.engineState
 
     init {
         // Collect finalized segments for UI display ONLY
@@ -78,6 +80,7 @@ class TranscriptionViewModel @Inject constructor(
 
     fun startRecording() {
         if (_isListening.value) return
+        if (speechRepository.engineState.value != com.example.voxtranscribe.data.EngineState.Ready) return
         
         viewModelScope.launch {
             _accumulatedText.value = ""
