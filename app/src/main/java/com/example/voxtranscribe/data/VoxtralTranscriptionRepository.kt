@@ -6,6 +6,7 @@ import com.example.voxtranscribe.domain.TranscriptionRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,10 +52,11 @@ class VoxtralTranscriptionRepository @Inject constructor(
 
     // Buffer configuration
     private val SAMPLE_RATE = 16000
-    private val CHUNK_DURATION_SEC = 2 
+    private val CHUNK_DURATION_SEC = 1 
     private val MIN_SAMPLES = SAMPLE_RATE * CHUNK_DURATION_SEC
     
     private var audioQueue: Channel<FloatArray>? = null
+    private val fullAudioHistory = java.util.Collections.synchronizedList(ArrayList<FloatArray>())
 
     private var streamHandle: Long = 0
 
@@ -82,14 +84,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 }
                 
                 if (handle != 0L) {
-                    streamHandle = voxtralJni.streamInit(handle)
-                    if (streamHandle != 0L) {
-                        _engineState.value = EngineState.Ready
-                        Log.i(TAG, "Voxtral engine and stream initialized successfully")
-                    } else {
-                        _engineState.value = EngineState.Error
-                        Log.e(TAG, "Failed to initialize stream")
-                    }
+                    initStream()
                 } else {
                     _engineState.value = EngineState.Error
                     Log.e(TAG, "Failed to initialize Voxtral engine")
@@ -98,6 +93,20 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 _engineState.value = EngineState.Error
                 Log.e(TAG, "Exception during Voxtral init", e)
             }
+        }
+    }
+    
+    private fun initStream() {
+        if (handle == 0L) return
+        if (streamHandle != 0L) voxtralJni.streamFree(streamHandle)
+        
+        streamHandle = voxtralJni.streamInit(handle)
+        if (streamHandle != 0L) {
+            _engineState.value = EngineState.Ready
+            Log.i(TAG, "Voxtral engine and stream initialized successfully")
+        } else {
+            _engineState.value = EngineState.Error
+            Log.e(TAG, "Failed to initialize stream")
         }
     }
 
@@ -110,61 +119,54 @@ class VoxtralTranscriptionRepository @Inject constructor(
         Log.d(TAG, "Starting listening...")
         audioRecorder.startRecording()
         
+        fullAudioHistory.clear()
         transcriptionJob?.cancel()
         processJob?.cancel()
         
-        audioQueue = Channel(Channel.UNLIMITED)
+        // Bounded channel for live preview (drop oldest to avoid lag spiral)
+        audioQueue = Channel(capacity = 5, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         
         transcriptionJob = scope.launch {
             Log.d(TAG, "Transcription producer started")
             audioRecorder.audioFlow.collect { audioBuffer ->
-                audioQueue?.send(audioBuffer)
+                fullAudioHistory.add(audioBuffer) // Save full fidelity
+                audioQueue?.trySend(audioBuffer)  // Best-effort live preview
             }
         }
 
         processJob = scope.launch {
-            Log.d(TAG, "Transcription consumer started")
+            Log.d(TAG, "Transcription live consumer started")
             
             val queue = audioQueue ?: return@launch
             for (chunk in queue) {
-                processBuffer(chunk)
+                processLiveBuffer(chunk)
             }
             
-            // Channel closed, process remaining
-            Log.d(TAG, "Transcription consumer finished")
+            Log.d(TAG, "Transcription live consumer finished")
         }
     }
 
-    private suspend fun processBuffer(buffer: FloatArray) {
-        if (handle == 0L || streamHandle == 0L) {
-            Log.e(TAG, "Handle is 0, cannot process buffer")
-            return
-        }
+    private suspend fun processLiveBuffer(buffer: FloatArray) {
+        if (handle == 0L || streamHandle == 0L) return
 
         try {
-            // Push audio to native stream buffer
+            _partialText.value = "..." // Indicate processing activity
+            
             withContext(Dispatchers.IO) {
                  voxtralJni.streamPush(streamHandle, buffer)
             }
             
-            // Attempt decode (will only happen if enough audio is buffered)
             val text = withContext(Dispatchers.IO) {
                  voxtralJni.streamDecode(streamHandle)
             }
             
             if (text.isNotEmpty()) {
-                Log.i(TAG, "Transcribed: $text")
-                
-                _transcriptionState.emit(
-                    LogEntry(
-                        timestamp = System.currentTimeMillis(),
-                        text = text,
-                        isFinal = true
-                    )
-                )
+                _partialText.value = text
+                // NOTE: We do NOT emit to transcriptionState here to avoid duplicates/fragmentation in DB.
+                // Live view is purely visual.
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error during transcription: ${e.message}")
+            Log.e(TAG, "Error during live transcription: ${e.message}")
         }
     }
     
@@ -181,8 +183,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
         Log.d(TAG, "Running test transcription (3s sine wave)...")
         return try {
             val start = System.currentTimeMillis()
-            // For one-off test, we can still use the direct transcribe API
-            // Or we could use the stream API, but let's keep it simple for now
             val text = withContext(Dispatchers.IO) {
                  voxtralJni.transcribe(handle, buffer, 32)
             }
@@ -204,32 +204,78 @@ class VoxtralTranscriptionRepository @Inject constructor(
         transcriptionJob?.cancel()
         transcriptionJob = null
         
-        // Signal consumer to finish
         audioQueue?.close()
-        
-        // Wait for consumer to finish flushing
-        Log.d(TAG, "Waiting for processJob to finish flushing...")
-        processJob?.join()
-        
-        // Flush remaining audio in stream
-        if (streamHandle != 0L) {
-             val finalHash = withContext(Dispatchers.IO) {
-                 voxtralJni.streamFlush(streamHandle)
-             }
-             if (finalHash.isNotEmpty()) {
-                 Log.i(TAG, "Final flush: $finalHash")
-                 _transcriptionState.emit(
-                    LogEntry(
-                        timestamp = System.currentTimeMillis(),
-                        text = finalHash,
-                        isFinal = true
-                    )
-                )
-             }
-        }
-        
-        Log.d(TAG, "processJob finished.")
+        processJob?.join() // Wait for live consumer to finish pending chunks
         processJob = null
+        
+        Log.d(TAG, "Starting full offline transcription of ${fullAudioHistory.size} chunks...")
+        
+        // Final offline pass on full history
+        processFullHistory()
+        
+        Log.d(TAG, "Full processing finished.")
+    }
+    
+    private suspend fun processFullHistory() {
+        if (handle == 0L) return
+        
+        try {
+            // Reset stream for clean full pass
+            withContext(Dispatchers.IO) {
+                initStream() 
+            }
+            
+            if (streamHandle == 0L) return
+
+            val resultAccumulator = StringBuilder()
+
+            // Feed all audio in larger batches to optimize CPU throughput
+            // 5s batches match our max_buffer_samples, minimizing redundant overlap encoding
+            withContext(Dispatchers.IO) {
+                val batchSize = 5 // 5 chunks of 1s each
+                var currentBatch = ArrayList<Float>()
+                
+                for (chunk in fullAudioHistory) {
+                    for (sample in chunk) currentBatch.add(sample)
+                    
+                    if (currentBatch.size >= SAMPLE_RATE * batchSize) {
+                        voxtralJni.streamPush(streamHandle, currentBatch.toFloatArray())
+                        val delta = voxtralJni.streamDecode(streamHandle)
+                        if (delta.isNotEmpty()) resultAccumulator.append(delta)
+                        currentBatch.clear()
+                    }
+                }
+                
+                // Push remaining
+                if (currentBatch.isNotEmpty()) {
+                    voxtralJni.streamPush(streamHandle, currentBatch.toFloatArray())
+                }
+                
+                val finalHash = voxtralJni.streamFlush(streamHandle)
+                if (finalHash.isNotEmpty()) {
+                    resultAccumulator.append(finalHash)
+                }
+                
+                val finalText = resultAccumulator.toString().trim()
+                Log.i(TAG, "Final Transcription: $finalText")
+                
+                if (finalText.isNotEmpty()) {
+                    _transcriptionState.emit(
+                        LogEntry(
+                            timestamp = System.currentTimeMillis(),
+                            text = finalText,
+                            isFinal = true
+                        )
+                    )
+                }
+            }
+            
+            // Clear partial text as we are done
+            _partialText.value = ""
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during full transcription: ${e.message}")
+        }
     }
 
     override fun clear() {

@@ -55,7 +55,7 @@ The app requires a GGUF model file to function. This file is not bundled due to 
 
 ## Acknowledgements
 
-*   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (Forked for Tier 1 Android optimizations at [Danmoreng/voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp), branch `android-tier1-kv-opencl`. Includes internal Android KV-cache optimizations.)
+*   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (Forked for Tier 1 Android optimizations at [Danmoreng/voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp), branch `android-tier1-kv-opencl`. Includes internal Android KV-cache optimizations. **Note:** Default to CPU or OpenCL on Android for stability; Vulkan may be unstable on some Adreno drivers.)
 *   **GGML**: [ggml-org/ggml](https://github.com/ggml-org/ggml)
 *   **Mistral AI**: Creators of the original Voxtral model.
 

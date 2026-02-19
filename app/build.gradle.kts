@@ -25,12 +25,8 @@ android {
                 arguments(
                     "-DGGML_OPENCL=OFF",
                     "-DVOXTRAL_AUTO_DETECT_OPENCL=OFF",
-                    "-DGGML_VULKAN=ON",
-                    "-DVOXTRAL_AUTO_DETECT_VULKAN=ON",
-                    "-DHOST_C_COMPILER=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
-                    "-DHOST_CXX_COMPILER=C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe",
-                    "-DCMAKE_SYSTEM_LIBRARY_PATH=C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64;C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/ucrt/x64;C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/lib/x64",
-                    "-DCMAKE_MT=C:/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64/mt.exe"
+                    "-DGGML_VULKAN=OFF",
+                    "-DVOXTRAL_AUTO_DETECT_VULKAN=OFF"
                 )
             }
         }

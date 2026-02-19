@@ -4,6 +4,5 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/voxtral" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/voxtral/ggml" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/external/vulkan-headers" vcs="Git" />
   </component>
 </project>

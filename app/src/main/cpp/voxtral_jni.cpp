@@ -110,7 +110,8 @@ Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject t
     if (ctxPtr == 0) return 0;
     VoxtralHandle *handle = reinterpret_cast<VoxtralHandle *>(ctxPtr);
     
-    voxtral_stream_params params; // use defaults
+    voxtral_stream_params params;
+    params.max_buffer_samples = 16000 * 5; // 5s rolling window to cap encoder cost
     voxtral_stream *stream = voxtral_stream_create(handle->ctx, params);
     
     if (!stream) {

@@ -14,7 +14,9 @@ import androidx.lifecycle.lifecycleScope
 import com.example.voxtranscribe.MainActivity
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -73,7 +75,10 @@ class TranscriptionService : LifecycleService() {
                     Log.d(TAG, "Received entry: ${entry.text}, isFinal: ${entry.isFinal}")
                     if (entry.isFinal) {
                         try {
-                            notesRepository.insertSegment(noteId, entry.text, true)
+                            // Prevent cancellation during save
+                            withContext(NonCancellable) {
+                                notesRepository.insertSegment(noteId, entry.text, true)
+                            }
                             Log.d(TAG, "Saved segment to DB for note $noteId")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to insert segment", e)
