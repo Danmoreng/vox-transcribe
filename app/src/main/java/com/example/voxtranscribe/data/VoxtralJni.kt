@@ -40,9 +40,19 @@ class VoxtralJni @Inject constructor() {
     /**
      * Creates a new streaming context.
      * @param ctxPtr The context handle returned by init().
+     * @param maxBufferSamples Max PCM samples to keep in rolling buffer.
+     * @param enableIncrementalEncoder WIP: Enable experimental incremental encoder.
+     * @param minDecodeSamples Samples required before triggering a decode (cadence).
+     * @param maxTokens Max tokens to generate per decode step.
      * @return A pointer to the streaming context, or 0 if failed.
      */
-    external fun streamInit(ctxPtr: Long): Long
+    external fun streamInit(
+        ctxPtr: Long, 
+        maxBufferSamples: Int, 
+        enableIncrementalEncoder: Boolean,
+        minDecodeSamples: Int,
+        maxTokens: Int
+    ): Long
 
     /**
      * Frees the streaming context.
@@ -71,4 +81,28 @@ class VoxtralJni @Inject constructor() {
      * @return The final transcription string.
      */
     external fun streamFlush(streamPtr: Long): String
+
+    /**
+     * Retrieves statistics for the given stream.
+     * @param streamPtr The handle returned by streamInit().
+     * @return A VoxtralStreamStats object or null if failed.
+     */
+    external fun streamGetStats(streamPtr: Long): VoxtralStreamStats?
 }
+
+data class VoxtralStreamStats(
+    val decodeCalls: Long,
+    val decodeSuccess: Long,
+    val skippedCadence: Long,
+    val skippedSilence: Long,
+    val failures: Long,
+    val lastAudioSamples: Int,
+    val lastGeneratedTokens: Int,
+    val lastTotalMs: Double,
+    val lastEncoderMs: Double,
+    val lastAdapterMs: Double,
+    val lastPrefillMs: Double,
+    val lastDecodeMs: Double,
+    val lastDecodeMsPerStep: Double,
+    val lastRtf: Double
+)

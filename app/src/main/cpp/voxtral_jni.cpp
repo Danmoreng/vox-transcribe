@@ -106,12 +106,19 @@ Java_com_example_voxtranscribe_data_VoxtralJni_transcribe(JNIEnv *env, jobject t
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject thiz, jlong ctxPtr) {
+Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject thiz, jlong ctxPtr, jint maxBufferSamples, jboolean enableIncrementalEncoder, jint minDecodeSamples, jint maxTokens) {
     if (ctxPtr == 0) return 0;
     VoxtralHandle *handle = reinterpret_cast<VoxtralHandle *>(ctxPtr);
     
-    voxtral_stream_params params;
-    params.max_buffer_samples = 16000 * 5; // 5s rolling window to cap encoder cost
+    // 1. Base preset
+    voxtral_stream_params params = voxtral_stream_params_android_cpu_live();
+    
+    // 2. Apply requested tuning
+    params.experimental_incremental_encoder = enableIncrementalEncoder;
+    params.max_buffer_samples = maxBufferSamples;
+    params.min_decode_samples = minDecodeSamples;
+    params.max_tokens         = maxTokens;
+    
     voxtral_stream *stream = voxtral_stream_create(handle->ctx, params);
     
     if (!stream) {
@@ -165,6 +172,37 @@ Java_com_example_voxtranscribe_data_VoxtralJni_streamFlush(JNIEnv *env, jobject 
         return env->NewStringUTF(result.text.c_str());
     }
     return env->NewStringUTF("");
+}
+
+JNIEXPORT jobject JNICALL
+Java_com_example_voxtranscribe_data_VoxtralJni_streamGetStats(JNIEnv *env, jobject thiz, jlong streamPtr) {
+    if (streamPtr == 0) return nullptr;
+    voxtral_stream *stream = reinterpret_cast<voxtral_stream *>(streamPtr);
+    
+    voxtral_stream_stats stats;
+    if (!voxtral_stream_get_stats(stream, stats)) {
+        return nullptr;
+    }
+    
+    jclass cls = env->FindClass("com/example/voxtranscribe/data/VoxtralStreamStats");
+    jmethodID constructor = env->GetMethodID(cls, "<init>", "(JJJJJIIDDDDDDD)V");
+    
+    return env->NewObject(cls, constructor,
+        (jlong)stats.decode_calls,
+        (jlong)stats.decode_success,
+        (jlong)stats.skipped_cadence,
+        (jlong)stats.skipped_silence,
+        (jlong)stats.failures,
+        (jint)stats.last_audio_samples,
+        (jint)stats.last_generated_tokens,
+        (jdouble)stats.last_total_ms,
+        (jdouble)stats.last_encoder_ms,
+        (jdouble)stats.last_adapter_ms,
+        (jdouble)stats.last_prefill_ms,
+        (jdouble)stats.last_decode_ms,
+        (jdouble)stats.last_decode_ms_per_step,
+        (jdouble)stats.last_rtf
+    );
 }
 
 } // extern "C"
