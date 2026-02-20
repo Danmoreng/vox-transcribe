@@ -60,7 +60,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
     private var lastRtf = 1.0
     private var lastSuccessCount: Long = 0
     private var adaptiveMinDecodeSamples = SAMPLE_RATE * 2
-    private var adaptiveMaxTokens = 128
+    private var adaptiveMaxTokens = 256
 
     fun setGpuBackend(backend: Int) {
         if (_gpuBackend.value != backend) {
@@ -110,10 +110,11 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 if (handle != 0L) {
                     val initialized = withContext(nativeDispatcher) {
                         initStreamInternal(
-                            maxBufferSamples = SAMPLE_RATE * 20, // 20s stable window
+                            maxBufferSamples = SAMPLE_RATE * 120, // 120s stable window
                             enableIncrementalEncoder = true,
+                            enablePersistentStreamState = true,
                             minDecodeSamples = adaptiveMinDecodeSamples,
-                            maxTokens = 128
+                            maxTokens = 256
                         )
                     }
                     if (initialized) {
@@ -137,6 +138,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
     private fun initStreamInternal(
         maxBufferSamples: Int, 
         enableIncrementalEncoder: Boolean,
+        enablePersistentStreamState: Boolean,
         minDecodeSamples: Int,
         maxTokens: Int
     ): Boolean {
@@ -150,6 +152,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
             handle, 
             maxBufferSamples, 
             enableIncrementalEncoder,
+            enablePersistentStreamState,
             minDecodeSamples,
             maxTokens
         )
@@ -167,15 +170,16 @@ class VoxtralTranscriptionRepository @Inject constructor(
         lastRtf = 1.0
         lastSuccessCount = 0
         adaptiveMinDecodeSamples = SAMPLE_RATE * 2
-        adaptiveMaxTokens = 128
+        adaptiveMaxTokens = 256
         
         transcriptionJob?.cancel()
         processJob?.cancel()
         
         scope.launch(nativeDispatcher) {
             initStreamInternal(
-                maxBufferSamples = SAMPLE_RATE * 20,
+                maxBufferSamples = SAMPLE_RATE * 120,
                 enableIncrementalEncoder = true,
+                enablePersistentStreamState = true,
                 minDecodeSamples = adaptiveMinDecodeSamples,
                 maxTokens = adaptiveMaxTokens
             )

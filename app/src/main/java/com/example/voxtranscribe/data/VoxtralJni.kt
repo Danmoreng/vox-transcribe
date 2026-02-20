@@ -42,6 +42,7 @@ class VoxtralJni @Inject constructor() {
      * @param ctxPtr The context handle returned by init().
      * @param maxBufferSamples Max PCM samples to keep in rolling buffer.
      * @param enableIncrementalEncoder WIP: Enable experimental incremental encoder.
+     * @param enablePersistentStreamState WIP: Enable experimental persistent stream state.
      * @param minDecodeSamples Samples required before triggering a decode (cadence).
      * @param maxTokens Max tokens to generate per decode step.
      * @return A pointer to the streaming context, or 0 if failed.
@@ -50,6 +51,7 @@ class VoxtralJni @Inject constructor() {
         ctxPtr: Long, 
         maxBufferSamples: Int, 
         enableIncrementalEncoder: Boolean,
+        enablePersistentStreamState: Boolean,
         minDecodeSamples: Int,
         maxTokens: Int
     ): Long

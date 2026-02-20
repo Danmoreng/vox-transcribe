@@ -106,7 +106,7 @@ Java_com_example_voxtranscribe_data_VoxtralJni_transcribe(JNIEnv *env, jobject t
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject thiz, jlong ctxPtr, jint maxBufferSamples, jboolean enableIncrementalEncoder, jint minDecodeSamples, jint maxTokens) {
+Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject thiz, jlong ctxPtr, jint maxBufferSamples, jboolean enableIncrementalEncoder, jboolean enablePersistentStreamState, jint minDecodeSamples, jint maxTokens) {
     if (ctxPtr == 0) return 0;
     VoxtralHandle *handle = reinterpret_cast<VoxtralHandle *>(ctxPtr);
     
@@ -115,6 +115,7 @@ Java_com_example_voxtranscribe_data_VoxtralJni_streamInit(JNIEnv *env, jobject t
     
     // 2. Apply requested tuning
     params.experimental_incremental_encoder = enableIncrementalEncoder;
+    params.experimental_persistent_stream_state = enablePersistentStreamState;
     params.max_buffer_samples = maxBufferSamples;
     params.min_decode_samples = minDecodeSamples;
     params.max_tokens         = maxTokens;
