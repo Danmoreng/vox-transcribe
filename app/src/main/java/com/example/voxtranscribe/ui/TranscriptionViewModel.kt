@@ -35,12 +35,12 @@ class TranscriptionViewModel @Inject constructor(
     val allNotes: StateFlow<List<Note>> = notesRepository.getAllNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private var currentNoteId: Long? = null
-    private val _accumulatedText = MutableStateFlow("")
-    
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
+    private var currentNoteId: Long? = null
+    private val _accumulatedText = MutableStateFlow("")
+    
     val transcriptionState: StateFlow<String> = combine(
         _accumulatedText,
         speechRepository.partialText,

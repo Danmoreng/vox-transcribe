@@ -13,11 +13,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioRecorder {
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val isRecording = AtomicBoolean(false)
 
     // Voxtral expects 16kHz, 16-bit PCM, Mono
     private val sampleRate = 16000
@@ -31,10 +33,9 @@ class AudioRecorder {
 
     @SuppressLint("MissingPermission")
     fun startRecording() {
-        if (recordingJob?.isActive == true) return
+        if (isRecording.get()) return
 
         try {
-            // Re-create channel to ensure it's fresh and not closed from previous session
             _audioChannel = Channel(Channel.UNLIMITED)
             
             Log.d("AudioRecorder", "Initializing AudioRecord with buffer size: $bufferSize")
@@ -52,12 +53,13 @@ class AudioRecorder {
             }
 
             audioRecord?.startRecording()
+            isRecording.set(true)
             Log.d("AudioRecorder", "Started recording")
 
             recordingJob = scope.launch {
                 val buffer = ShortArray(bufferSize / 2)
                 try {
-                    while (isActive) {
+                    while (isRecording.get() || audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                         val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                         if (readCount > 0) {
                             val floatBuffer = FloatArray(readCount)
@@ -69,10 +71,7 @@ class AudioRecorder {
                             Log.e("AudioRecorder", "AudioRecord read error: $readCount")
                             break
                         } else {
-                            // readCount == 0, avoid tight loop if recorder was stopped
-                            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
-                                break
-                            }
+                            if (!isRecording.get()) break
                         }
                     }
                 } catch (e: Exception) {
@@ -88,6 +87,7 @@ class AudioRecorder {
     }
 
     fun stopRecording() {
+        isRecording.set(false)
         try {
             if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                  audioRecord?.stop()
@@ -95,17 +95,15 @@ class AudioRecorder {
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Error stopping AudioRecord", e)
         }
-        
-        // We cancel the job to break the while(isActive) loop
-        recordingJob?.cancel()
         recordingJob = null
-        
+    }
+    
+    fun release() {
         try {
             audioRecord?.release()
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Error releasing AudioRecord", e)
         }
         audioRecord = null
-        Log.d("AudioRecorder", "Stopped recording")
     }
 }
