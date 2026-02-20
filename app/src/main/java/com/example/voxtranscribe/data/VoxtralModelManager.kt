@@ -16,22 +16,40 @@ class VoxtralModelManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val TAG = "VoxtralModelManager"
-    private val modelFileName = "voxtral-mini-4b-realtime-q4_0.gguf"
-    val modelFile = File(context.filesDir, modelFileName)
+    private var selectedModelName: String? = null
 
     fun isModelAvailable(): Boolean {
-        return modelFile.exists() && modelFile.length() > 0
+        return getAvailableModels().isNotEmpty()
     }
 
-    suspend fun copyModelFromUri(uri: Uri): Boolean {
+    fun getAvailableModels(): List<File> {
+        val files = context.filesDir.listFiles { _, name -> name.endsWith(".gguf") }
+        return files?.toList() ?: emptyList()
+    }
+
+    fun getSelectedModel(): File? {
+        val models = getAvailableModels()
+        if (models.isEmpty()) return null
+        
+        val selected = selectedModelName?.let { name -> models.find { it.name == name } }
+        return selected ?: models.first()
+    }
+
+    fun setSelectedModel(name: String) {
+        selectedModelName = name
+    }
+
+    suspend fun copyModelFromUri(uri: Uri, fileName: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
+                val targetFile = File(context.filesDir, fileName)
                 context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    FileOutputStream(modelFile).use { outputStream ->
+                    FileOutputStream(targetFile).use { outputStream ->
                         inputStream.copyTo(outputStream)
                     }
                 }
-                Log.d(TAG, "Model copied successfully to ${modelFile.absolutePath}")
+                Log.d(TAG, "Model copied successfully to ${targetFile.absolutePath}")
+                selectedModelName = fileName
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to copy model file", e)
@@ -40,7 +58,7 @@ class VoxtralModelManager @Inject constructor(
         }
     }
 
-    fun getModelPath(): String {
-        return modelFile.absolutePath
+    fun getModelPath(): String? {
+        return getSelectedModel()?.absolutePath
     }
 }

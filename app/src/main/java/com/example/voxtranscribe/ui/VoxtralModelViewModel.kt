@@ -49,7 +49,7 @@ class VoxtralModelViewModel @Inject constructor(
             _isCopying.value = true
             _copyResult.value = null
             
-            val success = modelManager.copyModelFromUri(uri)
+            val success = modelManager.copyModelFromUri(uri, "voxtral-mini-4b-realtime-q4_0.gguf")
             
             _isCopying.value = false
             if (success) {
@@ -66,6 +66,19 @@ class VoxtralModelViewModel @Inject constructor(
         voxtralRepo.loadModel()
     }
     
+    private val _isRecordingTest = MutableStateFlow(false)
+    val isRecordingTest: StateFlow<Boolean> = _isRecordingTest.asStateFlow()
+
+    fun startRecordingTest() {
+        _isRecordingTest.value = true
+        voxtralRepo.startRecordingTestSample()
+    }
+
+    fun stopRecordingTest() {
+        _isRecordingTest.value = false
+        voxtralRepo.stopRecordingTestSample()
+    }
+
     fun runTest() {
         viewModelScope.launch {
             _testResult.value = "Running test..."
@@ -73,9 +86,14 @@ class VoxtralModelViewModel @Inject constructor(
             _testResult.value = result
         }
     }
-    
-    fun clearResult() {
-        _copyResult.value = null
-        _testResult.value = null
+
+    fun getSelectedModelName(): String {
+        return voxtralRepo.getSelectedModelName()
     }
+
+    fun setGpuBackend(id: Int) {
+        voxtralRepo.setGpuBackend(id)
+    }
+
+    fun getGpuBackend(): StateFlow<Int> = voxtralRepo.gpuBackend
 }

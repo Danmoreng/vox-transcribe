@@ -11,7 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +38,9 @@ fun VoxtralModelScreen(
     val engineState by viewModel.engineState.collectAsStateWithLifecycle()
     val testResult by viewModel.testResult.collectAsStateWithLifecycle()
 
+    val isRecordingTest by viewModel.isRecordingTest.collectAsStateWithLifecycle()
+    val gpuBackend by viewModel.getGpuBackend().collectAsStateWithLifecycle()
+
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
@@ -43,6 +48,7 @@ fun VoxtralModelScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
+            // In a real app, we'd need a filename from the URI. Let's assume a default for now.
             viewModel.copyModel(it)
         }
     }
@@ -80,7 +86,7 @@ fun VoxtralModelScreen(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.Start
                 ) {
                     Text(text = "Status", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(16.dp))
@@ -90,20 +96,8 @@ fun VoxtralModelScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Model File:")
-                        if (isModelAvailable) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Available", tint = Color.Green)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Found")
-                            }
-                        } else {
-                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Error, contentDescription = "Missing", tint = Color.Red)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Missing")
-                            }
-                        }
+                        Text("Selected Model:")
+                        Text(viewModel.getSelectedModelName(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     }
                     
                     Spacer(modifier = Modifier.height(8.dp))
@@ -121,6 +115,29 @@ fun VoxtralModelScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
+            Text(text = "Hardware Acceleration", style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.Start))
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                listOf(
+                    0 to "CPU",
+                    1 to "Auto",
+                    4 to "Vulkan",
+                    5 to "OpenCL"
+                ).forEach { (id, name) ->
+                    FilterChip(
+                        selected = gpuBackend == id,
+                        onClick = { viewModel.setGpuBackend(id) },
+                        label = { Text(name) }
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
             if (isCopying) {
                 CircularProgressIndicator()
                 Text("Copying model file... Do not close.", modifier = Modifier.padding(top = 8.dp))
@@ -130,7 +147,7 @@ fun VoxtralModelScreen(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = engineState != EngineState.Loading
                 ) {
-                    Text(if (isModelAvailable) "Update Model File" else "Import .gguf Model File")
+                    Text("Import New .gguf Model File")
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -138,9 +155,9 @@ fun VoxtralModelScreen(
                 Button(
                     onClick = { viewModel.loadEngine() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = isModelAvailable && engineState != EngineState.Loading && engineState != EngineState.Ready,
+                    enabled = isModelAvailable && engineState != EngineState.Loading,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
+                        containerColor = if (engineState == EngineState.Ready) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
                     )
                 ) {
                     if (engineState == EngineState.Loading) {
@@ -150,29 +167,44 @@ fun VoxtralModelScreen(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Loading (~30s)...")
+                        Text("Loading Engine...")
                     } else {
-                        Text("Load Engine")
+                        Text(if (engineState == EngineState.Ready) "Reload Engine" else "Load Engine")
                     }
                 }
                 
                 if (engineState == EngineState.Ready) {
-                    Text(
-                        text = "Engine is ready. You can now start recording.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Green,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(text = "A/B Testing (Mock Recording)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.Start))
+                    Spacer(modifier = Modifier.height(8.dp))
                     
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    OutlinedButton(
-                        onClick = { viewModel.runTest() },
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Run Offline Test (3s Noise)")
+                        Button(
+                            onClick = { 
+                                if (isRecordingTest) viewModel.stopRecordingTest() else viewModel.startRecordingTest()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isRecordingTest) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
+                            )
+                        ) {
+                            Icon(if (isRecordingTest) Icons.Default.Stop else Icons.Default.Mic, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isRecordingTest) "Stop" else "Rec Test")
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { viewModel.runTest() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isRecordingTest
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Run Test")
+                        }
                     }
                 }
             }
@@ -184,10 +216,13 @@ fun VoxtralModelScreen(
             
             testResult?.let { result ->
                 Spacer(modifier = Modifier.height(16.dp))
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
                     Text(
                         text = result,
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
