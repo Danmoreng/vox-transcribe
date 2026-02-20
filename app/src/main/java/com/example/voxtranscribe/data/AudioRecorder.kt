@@ -8,8 +8,9 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -25,14 +26,17 @@ class AudioRecorder {
     private val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioEncoding)
     private val bufferSize = minBufferSize * 2
 
-    private val _audioFlow = MutableSharedFlow<FloatArray>()
-    val audioFlow: SharedFlow<FloatArray> = _audioFlow
+    private var _audioChannel = Channel<FloatArray>(Channel.UNLIMITED)
+    val audioFlow: Flow<FloatArray> get() = _audioChannel.receiveAsFlow()
 
     @SuppressLint("MissingPermission")
     fun startRecording() {
         if (recordingJob?.isActive == true) return
 
         try {
+            // Re-create channel to ensure it's fresh and not closed from previous session
+            _audioChannel = Channel(Channel.UNLIMITED)
+            
             Log.d("AudioRecorder", "Initializing AudioRecord with buffer size: $bufferSize")
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
@@ -51,21 +55,31 @@ class AudioRecorder {
             Log.d("AudioRecorder", "Started recording")
 
             recordingJob = scope.launch {
-                val buffer = ShortArray(bufferSize / 2) // Read as shorts (16-bit)
-                while (isActive) {
-                    val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                    if (readCount > 0) {
-                        // Convert ShortArray to FloatArray normalized to [-1.0, 1.0]
-                        val floatBuffer = FloatArray(readCount)
-                        for (i in 0 until readCount) {
-                            floatBuffer[i] = buffer[i] / 32768.0f
+                val buffer = ShortArray(bufferSize / 2)
+                try {
+                    while (isActive) {
+                        val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                        if (readCount > 0) {
+                            val floatBuffer = FloatArray(readCount)
+                            for (i in 0 until readCount) {
+                                floatBuffer[i] = buffer[i] / 32768.0f
+                            }
+                            _audioChannel.send(floatBuffer)
+                        } else if (readCount < 0) {
+                            Log.e("AudioRecorder", "AudioRecord read error: $readCount")
+                            break
+                        } else {
+                            // readCount == 0, avoid tight loop if recorder was stopped
+                            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_STOPPED) {
+                                break
+                            }
                         }
-                        // Log.v("AudioRecorder", "Emitting buffer of size: $readCount")
-                        _audioFlow.emit(floatBuffer)
-                    } else {
-                        Log.w("AudioRecorder", "AudioRecord read returned: $readCount")
-                        if (readCount < 0) break // Error
                     }
+                } catch (e: Exception) {
+                    Log.e("AudioRecorder", "Error in recording loop", e)
+                } finally {
+                    _audioChannel.close()
+                    Log.d("AudioRecorder", "Audio channel closed")
                 }
             }
         } catch (e: Exception) {
@@ -74,15 +88,22 @@ class AudioRecorder {
     }
 
     fun stopRecording() {
-        recordingJob?.cancel()
-        recordingJob = null
         try {
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                  audioRecord?.stop()
-                 audioRecord?.release()
             }
         } catch (e: Exception) {
-            Log.e("AudioRecorder", "Error stopping recording", e)
+            Log.e("AudioRecorder", "Error stopping AudioRecord", e)
+        }
+        
+        // We cancel the job to break the while(isActive) loop
+        recordingJob?.cancel()
+        recordingJob = null
+        
+        try {
+            audioRecord?.release()
+        } catch (e: Exception) {
+            Log.e("AudioRecorder", "Error releasing AudioRecord", e)
         }
         audioRecord = null
         Log.d("AudioRecorder", "Stopped recording")

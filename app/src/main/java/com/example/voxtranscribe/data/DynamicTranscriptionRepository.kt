@@ -2,6 +2,7 @@ package com.example.voxtranscribe.data
 
 import com.example.voxtranscribe.domain.LogEntry
 import com.example.voxtranscribe.domain.TranscriptionRepository
+import com.example.voxtranscribe.data.EngineState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject

@@ -3,6 +3,7 @@ package com.example.voxtranscribe.data
 import android.util.Log
 import com.example.voxtranscribe.domain.LogEntry
 import com.example.voxtranscribe.domain.TranscriptionRepository
+import com.example.voxtranscribe.data.EngineState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,10 +20,6 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.sin
-
-enum class EngineState {
-    Uninitialized, Loading, Ready, Error
-}
 
 @Singleton
 class VoxtralTranscriptionRepository @Inject constructor(
@@ -62,7 +59,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
     
     private var lastRtf = 1.0
     private var lastSuccessCount: Long = 0
-    private var skipNextDecode = false
     private var adaptiveMinDecodeSamples = SAMPLE_RATE * 2
     private var adaptiveMaxTokens = 24
 
@@ -96,9 +92,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 _engineState.value = EngineState.Loading
                 Log.d(TAG, "Initializing Voxtral engine with backend: ${_gpuBackend.value} and model: $modelPath")
                 
-                // Cleanup previous handle if exists
                 if (handle != 0L) {
-                    // We need to cleanup on native dispatcher
                     withContext(nativeDispatcher) {
                         if (streamHandle != 0L) {
                             voxtralJni.streamFree(streamHandle)
@@ -115,12 +109,11 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 
                 if (handle != 0L) {
                     val initialized = withContext(nativeDispatcher) {
-                        // Restore 5s context for semantic stability, 2s cadence baseline
                         initStreamInternal(
-                            maxBufferSamples = SAMPLE_RATE * 5,
+                            maxBufferSamples = SAMPLE_RATE * 60, // 60s buffer to prevent cut-off
                             enableIncrementalEncoder = true,
-                            minDecodeSamples = SAMPLE_RATE * 2,
-                            maxTokens = 24
+                            minDecodeSamples = adaptiveMinDecodeSamples,
+                            maxTokens = 128 // Increased token budget for full sentences
                         )
                     }
                     if (initialized) {
@@ -136,12 +129,11 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 }
             } catch (e: Throwable) {
                 _engineState.value = EngineState.Error
-                Log.e(TAG, "Critical failure during Voxtral init (possible native crash)", e)
+                Log.e(TAG, "Critical failure during Voxtral init", e)
             }
         }
     }
     
-    // Must be called on nativeDispatcher
     private fun initStreamInternal(
         maxBufferSamples: Int, 
         enableIncrementalEncoder: Boolean,
@@ -168,40 +160,43 @@ class VoxtralTranscriptionRepository @Inject constructor(
         if (_engineState.value != EngineState.Ready) return
 
         Log.d(TAG, "Starting listening...")
-        audioRecorder.startRecording()
         
         fullAudioHistory.clear()
         liveAccumulator.setLength(0)
         _partialText.value = ""
         lastRtf = 1.0
         lastSuccessCount = 0
-        skipNextDecode = false
-        adaptiveMinDecodeSamples = SAMPLE_RATE * 2 // 2.0s cadence baseline
-        adaptiveMaxTokens = 24
+        adaptiveMinDecodeSamples = SAMPLE_RATE * 2
+        adaptiveMaxTokens = 48
         
         transcriptionJob?.cancel()
         processJob?.cancel()
         
-        // Ensure stream is reset to optimized live settings: 5s context, 2s cadence
+        // Ensure stream is reset to optimized live settings
         scope.launch(nativeDispatcher) {
             initStreamInternal(
-                maxBufferSamples = SAMPLE_RATE * 5,
+                maxBufferSamples = SAMPLE_RATE * 10,
                 enableIncrementalEncoder = true,
                 minDecodeSamples = adaptiveMinDecodeSamples,
                 maxTokens = adaptiveMaxTokens
             )
         }
         
-        // Sequential processing: Use an unlimited channel to avoid dropping audio chunks
         val queue = Channel<FloatArray>(capacity = Channel.UNLIMITED)
         audioQueue = queue
         
+        audioRecorder.startRecording()
+
         transcriptionJob = scope.launch {
-            audioRecorder.audioFlow.collect { audioBuffer ->
-                synchronized(fullAudioHistory) {
-                    fullAudioHistory.add(audioBuffer)
+            try {
+                audioRecorder.audioFlow.collect { audioBuffer: FloatArray ->
+                    synchronized(fullAudioHistory) {
+                        fullAudioHistory.add(audioBuffer)
+                    }
+                    queue.send(audioBuffer)
                 }
-                queue.send(audioBuffer)
+            } finally {
+                queue.close()
             }
         }
 
@@ -218,15 +213,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
         try {
             val text = withContext(nativeDispatcher) {
                  voxtralJni.streamPush(streamHandle, buffer)
-                 
-                 // Sequential Processing: skipping is now disabled to ensure full accuracy
-                 /*
-                 if (skipNextDecode) {
-                     skipNextDecode = false
-                     return@withContext ""
-                 }
-                 */
-                 
                  voxtralJni.streamDecode(streamHandle)
             }
             
@@ -236,7 +222,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 Log.d(TAG, "Live Delta: '$text'")
             }
             
-            // Stats check for adaptation (logging only, no skipping)
             val stats = withContext(nativeDispatcher) {
                 voxtralJni.streamGetStats(streamHandle)
             }
@@ -244,47 +229,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 if (it.decodeSuccess > lastSuccessCount) {
                     lastSuccessCount = it.decodeSuccess
                     lastRtf = it.lastRtf
-                    val rtfStr = "%.2f".format(it.lastRtf)
-                    val encStr = "%.1f".format(it.lastEncoderMs)
-                    Log.d(TAG, "Live Stats: RTF=$rtfStr, Enc=${encStr}ms, Cadence=${adaptiveMinDecodeSamples/16000.0}s, MaxTokens=$adaptiveMaxTokens")
-                    
-                    // Adaptive logic for parameters only (RTF > 1.0 means lagging)
-                    var changed = false
-                    if (it.lastRtf > 1.2) {
-                        // Throttling: Increase cadence and reduce token budget to catch up
-                        if (adaptiveMinDecodeSamples < SAMPLE_RATE * 4) {
-                            adaptiveMinDecodeSamples += (SAMPLE_RATE * 0.5).toInt()
-                            changed = true
-                        }
-                        if (adaptiveMaxTokens > 12) {
-                            adaptiveMaxTokens -= 4
-                            changed = true
-                        }
-                    } else if (it.lastRtf < 0.8) {
-                        // Relax: Gradually return to baseline (2.0s)
-                        if (adaptiveMinDecodeSamples > SAMPLE_RATE * 2) {
-                            adaptiveMinDecodeSamples -= (SAMPLE_RATE * 0.25).toInt()
-                            changed = true
-                        }
-                        if (adaptiveMaxTokens < 24) {
-                            adaptiveMaxTokens += 4
-                            changed = true
-                        }
-                    }
-
-                    if (changed) {
-                        Log.d(TAG, "Adapting parameters: Cadence=${adaptiveMinDecodeSamples/16000.0}s, MaxTokens=$adaptiveMaxTokens")
-                        scope.launch(nativeDispatcher) {
-                            initStreamInternal(
-                                maxBufferSamples = SAMPLE_RATE * 5, // Keep context at 5s baseline
-                                enableIncrementalEncoder = true,
-                                minDecodeSamples = adaptiveMinDecodeSamples,
-                                maxTokens = adaptiveMaxTokens
-                            )
-                        }
-                    }
-                    
-                    // skipNextDecode = it.lastRtf > 2.0 // DISABLED: Sequential processing required
+                    Log.d(TAG, "Live Stats: RTF=${"%.2f".format(it.lastRtf)}, Success=${it.decodeSuccess}")
                 }
             }
             
@@ -301,7 +246,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
         fullAudioHistory.clear()
         audioRecorder.startRecording()
         scope.launch {
-            audioRecorder.audioFlow.collect { buffer ->
+            audioRecorder.audioFlow.collect { buffer: FloatArray ->
                 if (isRecordingTestSample) {
                     synchronized(fullAudioHistory) {
                         fullAudioHistory.add(buffer)
@@ -330,7 +275,6 @@ class VoxtralTranscriptionRepository @Inject constructor(
         if (_engineState.value != EngineState.Ready) return "Engine not ready"
         
         val buffer = testSample ?: run {
-            // Fallback to 3s silence/sine if no sample recorded
             FloatArray(16000 * 3).also { buf ->
                 val freq = 440.0
                 for (i in buf.indices) {
@@ -343,10 +287,9 @@ class VoxtralTranscriptionRepository @Inject constructor(
         return try {
             withContext(nativeDispatcher) {
                  val start = System.currentTimeMillis()
-                 // Use the one-shot transcribe for the test sample
-                 val text = voxtralJni.transcribe(handle, buffer, 64)
+                 val text = voxtralJni.transcribe(handle, buffer, 128)
                  val end = System.currentTimeMillis()
-                 val rtf = (end - start) / (buffer.size / 16.0) // RTF = processing_time / audio_duration_ms
+                 val rtf = (end - start) / (buffer.size / 16.0)
                  "Test complete. RTF: ${"%.2f".format(rtf / 1000.0)}, Time: ${end - start}ms\nResult: '$text'"
             }
         } catch (e: Exception) {
@@ -358,15 +301,13 @@ class VoxtralTranscriptionRepository @Inject constructor(
         Log.d(TAG, "Stopping listening...")
         
         audioRecorder.stopRecording()
-        transcriptionJob?.cancel()
+        
+        // transcriptionJob closes audioQueue when done
+        transcriptionJob?.join()
         transcriptionJob = null
         
-        audioQueue?.close()
         processJob?.join()
         processJob = null
-        
-        // NEW: Sequential processing captures everything, so one-shot post-processing is removed.
-        // processFullHistory() 
         
         // Final flush of the stream to get any remaining audio
         val remainingText = withContext(nativeDispatcher) {
@@ -378,9 +319,12 @@ class VoxtralTranscriptionRepository @Inject constructor(
         if (remainingText.isNotEmpty()) {
             liveAccumulator.append(remainingText)
             _partialText.value = liveAccumulator.toString().trim()
+            Log.d(TAG, "Flush Delta: '$remainingText'")
         }
         
         val finalText = liveAccumulator.toString().trim()
+        Log.d(TAG, "Final compiled text length: ${finalText.length}")
+        
         if (finalText.isNotEmpty()) {
             _transcriptionState.emit(
                 LogEntry(
@@ -391,65 +335,13 @@ class VoxtralTranscriptionRepository @Inject constructor(
             )
         }
         
-        liveAccumulator.setLength(0)
-        _partialText.value = ""
+        // We do NOT clear partialText and liveAccumulator immediately to allow UI to catch up
+        // They will be cleared when startListening() is called next time.
         Log.d(TAG, "Transcription finished.")
-    }
-    
-    private suspend fun processFullHistory() {
-        if (handle == 0L) return
-        
-        try {
-            // Snapshot history
-            val audioData = synchronized(fullAudioHistory) {
-                fullAudioHistory.toList()
-            }
-            
-            if (audioData.isEmpty()) {
-                Log.w(TAG, "No audio recorded to transcribe.")
-                return
-            }
-
-            // 1. Flatten all recorded chunks into one large buffer
-            val totalSamples = audioData.sumOf { it.size }
-            val fullBuffer = FloatArray(totalSamples)
-            var offset = 0
-            for (chunk in audioData) {
-                System.arraycopy(chunk, 0, fullBuffer, offset, chunk.size)
-                offset += chunk.size
-            }
-
-            Log.d(TAG, "Running one-shot offline transcription on ${fullBuffer.size} samples...")
-            _partialText.value = "Saving... (Accurately transcribing full history...)"
-
-            // 2. Call the one-shot transcribe API (no rolling window)
-            // Use higher token budget for accuracy
-            val finalText = withContext(nativeDispatcher) {
-                 voxtralJni.transcribe(handle, fullBuffer, 192)
-            }
-            
-            Log.i(TAG, "Final Transcription: $finalText")
-            
-            if (finalText.isNotEmpty()) {
-                _transcriptionState.emit(
-                    LogEntry(
-                        timestamp = System.currentTimeMillis(),
-                        text = finalText,
-                        isFinal = true
-                    )
-                )
-            }
-            
-            // 3. Cleanup live state
-            liveAccumulator.setLength(0)
-            _partialText.value = ""
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error during full transcription: ${e.message}")
-        }
     }
 
     override fun clear() {
+        liveAccumulator.setLength(0)
         _partialText.value = ""
     }
     

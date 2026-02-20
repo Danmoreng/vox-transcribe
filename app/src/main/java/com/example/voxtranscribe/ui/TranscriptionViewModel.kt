@@ -38,15 +38,22 @@ class TranscriptionViewModel @Inject constructor(
     private var currentNoteId: Long? = null
     private val _accumulatedText = MutableStateFlow("")
     
-    val transcriptionState: StateFlow<String> = combine(
-        _accumulatedText,
-        speechRepository.partialText
-    ) { accumulated, partial ->
-        if (partial.isEmpty()) accumulated else if (accumulated.isEmpty()) partial else "$accumulated\n$partial"
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
-    
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
+
+    val transcriptionState: StateFlow<String> = combine(
+        _accumulatedText,
+        speechRepository.partialText,
+        _isListening
+    ) { accumulated, partial, listening ->
+        if (listening) {
+            if (partial.isEmpty()) accumulated else if (accumulated.isEmpty()) partial else "$accumulated\n$partial"
+        } else {
+            // After listening stops, prioritize the final accumulated text, 
+            // but fallback to partial if accumulated is still empty (finalizing...)
+            accumulated.ifEmpty { partial }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
     private val _durationSeconds = MutableStateFlow(0L)
     private var timerJob: Job? = null
