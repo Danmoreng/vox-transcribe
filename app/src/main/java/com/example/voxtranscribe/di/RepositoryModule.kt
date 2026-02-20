@@ -23,9 +23,9 @@ object RepositoryModule {
     @Provides
     @Singleton
     fun provideTranscriptionRepository(
-        voxtralRepo: VoxtralTranscriptionRepository
+        dynamicRepo: com.example.voxtranscribe.data.DynamicTranscriptionRepository
     ): TranscriptionRepository {
-        return voxtralRepo
+        return dynamicRepo
     }
 
     @Provides

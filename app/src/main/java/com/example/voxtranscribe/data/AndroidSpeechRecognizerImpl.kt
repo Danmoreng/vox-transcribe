@@ -18,7 +18,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionRepository, RecognitionListener {
+import javax.inject.Inject
+import javax.inject.Singleton
+import dagger.hilt.android.qualifiers.ApplicationContext
+
+@Singleton
+class AndroidSpeechRecognizerImpl @Inject constructor(
+    @param:ApplicationContext private val context: Context
+) : TranscriptionRepository, RecognitionListener {
 
     private val _isOfflineModel = MutableStateFlow(false)
     override val isOfflineModel: StateFlow<Boolean> = _isOfflineModel.asStateFlow()
@@ -69,6 +76,10 @@ class AndroidSpeechRecognizerImpl(private val context: Context) : TranscriptionR
 
     override fun clear() {
         _partialText.value = ""
+    }
+
+    override suspend fun transcribeTestAudio(): String {
+        return "Test not supported for Google Speech API"
     }
 
     override fun cleanup() {

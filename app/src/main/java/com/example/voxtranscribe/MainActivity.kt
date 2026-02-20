@@ -23,7 +23,10 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject
-    lateinit var voxtralRepo: VoxtralTranscriptionRepository
+    lateinit var transcriptionRepo: com.example.voxtranscribe.data.DynamicTranscriptionRepository
+
+    @Inject
+    lateinit var voxtralRepo: com.example.voxtranscribe.data.VoxtralTranscriptionRepository
 
     @Inject
     lateinit var modelManager: VoxtralModelManager
@@ -41,14 +44,17 @@ class MainActivity : ComponentActivity() {
             VoxTranscribeTheme {
                 val navController = rememberNavController()
                 
-                // Auto-load model on app start
+                // Auto-load model on app start if Voxtral is selected
                 LaunchedEffect(Unit) {
-                    voxtralRepo.loadModel()
+                    if (transcriptionRepo.currentEngineType.value == com.example.voxtranscribe.data.EngineType.Voxtral) {
+                        voxtralRepo.loadModel()
+                    }
                 }
                 
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Global Debug & Status Bar
                     DebugStatusBar(
+                        transcriptionRepo = transcriptionRepo,
                         voxtralRepo = voxtralRepo,
                         modelManager = modelManager,
                         onNavigateToSettings = {

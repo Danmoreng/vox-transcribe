@@ -20,17 +20,23 @@ import java.io.File
 
 import androidx.compose.foundation.layout.statusBarsPadding
 
+import com.example.voxtranscribe.data.DynamicTranscriptionRepository
+import com.example.voxtranscribe.data.EngineType
+
 @Composable
 fun DebugStatusBar(
+    transcriptionRepo: DynamicTranscriptionRepository,
     voxtralRepo: VoxtralTranscriptionRepository,
     modelManager: VoxtralModelManager,
     onNavigateToSettings: () -> Unit
 ) {
-    val engineState by voxtralRepo.engineState.collectAsState()
+    val engineType by transcriptionRepo.currentEngineType.collectAsState()
+    val engineState by transcriptionRepo.engineState.collectAsState()
     val gpuBackend by voxtralRepo.gpuBackend.collectAsState()
     val currentModel = modelManager.getSelectedModel()
     val availableModels = modelManager.getAvailableModels()
     
+    var showEngineMenu by remember { mutableStateOf(false) }
     var showModelMenu by remember { mutableStateOf(false) }
     var showBackendMenu by remember { mutableStateOf(false) }
 
@@ -55,89 +61,127 @@ fun DebugStatusBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Model Info & Selection
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { showModelMenu = true }
-            ) {
+            // Engine selection
+            Box {
                 Text(
-                    text = "Model: ${currentModel?.name ?: "None"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1
+                    text = engineType.name,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier
+                        .clickable { showEngineMenu = true }
+                        .padding(8.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.small)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(statusColor, shape = MaterialTheme.shapes.extraSmall)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = engineState.name,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
-                        ),
-                        color = statusColor
-                    )
-                }
-                
                 DropdownMenu(
-                    expanded = showModelMenu,
-                    onDismissRequest = { showModelMenu = false }
+                    expanded = showEngineMenu,
+                    onDismissRequest = { showEngineMenu = false }
                 ) {
-                    if (availableModels.isEmpty()) {
+                    EngineType.values().forEach { type ->
                         DropdownMenuItem(
-                            text = { Text("No models found") },
-                            onClick = { showModelMenu = false }
-                        )
-                    }
-                    availableModels.forEach { model ->
-                        DropdownMenuItem(
-                            text = { Text(model.name) },
+                            text = { Text(type.name) },
                             onClick = {
-                                modelManager.setSelectedModel(model.name)
-                                voxtralRepo.loadModel()
-                                showModelMenu = false
+                                transcriptionRepo.setEngineType(type)
+                                showEngineMenu = false
                             }
                         )
                     }
                 }
             }
 
-            // Backend Selection
-            Box {
-                Text(
-                    text = "Backend: ${getBackendName(gpuBackend)}",
-                    style = MaterialTheme.typography.labelSmall,
+            // Model Info & Selection (only for Voxtral)
+            if (engineType == EngineType.Voxtral) {
+                Column(
                     modifier = Modifier
-                        .clickable { showBackendMenu = true }
-                        .padding(8.dp)
-                        .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.small)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-                
-                DropdownMenu(
-                    expanded = showBackendMenu,
-                    onDismissRequest = { showBackendMenu = false }
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                        .clickable { showModelMenu = true }
                 ) {
-                    val backends = listOf(
-                        0 to "CPU Only",
-                        1 to "Auto",
-                        4 to "Vulkan",
-                        5 to "OpenCL"
+                    Text(
+                        text = "Model: ${currentModel?.name ?: "None"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
                     )
-                    backends.forEach { (id, name) ->
-                        DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                voxtralRepo.setGpuBackend(id)
-                                showBackendMenu = false
-                            }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(statusColor, shape = MaterialTheme.shapes.extraSmall)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = engineState.name,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            ),
+                            color = statusColor
                         )
                     }
+                    
+                    DropdownMenu(
+                        expanded = showModelMenu,
+                        onDismissRequest = { showModelMenu = false }
+                    ) {
+                        if (availableModels.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("No models found") },
+                                onClick = { showModelMenu = false }
+                            )
+                        }
+                        availableModels.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model.name) },
+                                onClick = {
+                                    modelManager.setSelectedModel(model.name)
+                                    voxtralRepo.loadModel()
+                                    showModelMenu = false
+                                }
+                            )
+                        }
+                    }
                 }
+
+                // Backend Selection
+                Box {
+                    Text(
+                        text = getBackendName(gpuBackend),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .clickable { showBackendMenu = true }
+                            .padding(8.dp)
+                            .background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.small)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                    
+                    DropdownMenu(
+                        expanded = showBackendMenu,
+                        onDismissRequest = { showBackendMenu = false }
+                    ) {
+                        val backends = listOf(
+                            0 to "CPU",
+                            1 to "Auto",
+                            4 to "Vulkan",
+                            5 to "OpenCL"
+                        )
+                        backends.forEach { (id, name) ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    voxtralRepo.setGpuBackend(id)
+                                    showBackendMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Spacer for Google Engine
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = if (engineState == EngineState.Ready) "Ready" else "Unknown",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor
+                )
             }
 
             IconButton(onClick = onNavigateToSettings) {

@@ -22,4 +22,5 @@ interface TranscriptionRepository {
     suspend fun stopListening()
     fun clear()
     fun cleanup()
+    suspend fun transcribeTestAudio(): String
 }

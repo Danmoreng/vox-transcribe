@@ -326,7 +326,7 @@ class VoxtralTranscriptionRepository @Inject constructor(
         }
     }
 
-    suspend fun transcribeTestAudio(): String {
+    override suspend fun transcribeTestAudio(): String {
         if (_engineState.value != EngineState.Ready) return "Engine not ready"
         
         val buffer = testSample ?: run {
