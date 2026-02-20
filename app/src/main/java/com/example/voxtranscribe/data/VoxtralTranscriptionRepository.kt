@@ -64,6 +64,9 @@ class VoxtralTranscriptionRepository @Inject constructor(
     private var lastRtf = 1.0
     private var lastSuccessCount: Long = 0
     private var skipNextDecode = false
+    
+    private var adaptiveMinDecodeSamples = SAMPLE_RATE // 1.0s baseline
+    private var adaptiveMaxTokens = 28
 
     fun loadModel() {
         if (_engineState.value == EngineState.Loading || _engineState.value == EngineState.Ready) {
@@ -87,12 +90,12 @@ class VoxtralTranscriptionRepository @Inject constructor(
                 
                 if (handle != 0L) {
                     val initialized = withContext(nativeDispatcher) {
-                        // Default live: Incremental ON, 1.5s cadence, 32 tokens
+                        // Restore 5s context for semantic stability, 2s cadence baseline
                         initStreamInternal(
                             maxBufferSamples = SAMPLE_RATE * 5,
                             enableIncrementalEncoder = true,
-                            minDecodeSamples = (SAMPLE_RATE * 1.5).toInt(),
-                            maxTokens = 32
+                            minDecodeSamples = SAMPLE_RATE * 2,
+                            maxTokens = 24
                         )
                     }
                     if (initialized) {
@@ -147,17 +150,19 @@ class VoxtralTranscriptionRepository @Inject constructor(
         lastRtf = 1.0
         lastSuccessCount = 0
         skipNextDecode = false
+        adaptiveMinDecodeSamples = SAMPLE_RATE * 2 // 2.0s cadence baseline
+        adaptiveMaxTokens = 24
         
         transcriptionJob?.cancel()
         processJob?.cancel()
         
-        // Ensure stream is reset to optimized live settings
+        // Ensure stream is reset to optimized live settings: 5s context, 2s cadence
         scope.launch(nativeDispatcher) {
             initStreamInternal(
                 maxBufferSamples = SAMPLE_RATE * 5,
                 enableIncrementalEncoder = true,
-                minDecodeSamples = (SAMPLE_RATE * 1.5).toInt(),
-                maxTokens = 32
+                minDecodeSamples = adaptiveMinDecodeSamples,
+                maxTokens = adaptiveMaxTokens
             )
         }
         
@@ -212,9 +217,44 @@ class VoxtralTranscriptionRepository @Inject constructor(
                     lastRtf = it.lastRtf
                     val rtfStr = "%.2f".format(it.lastRtf)
                     val encStr = "%.1f".format(it.lastEncoderMs)
-                    Log.d(TAG, "Live Stats: RTF=$rtfStr, Enc=${encStr}ms")
+                    Log.d(TAG, "Live Stats: RTF=$rtfStr, Enc=${encStr}ms, Cadence=${adaptiveMinDecodeSamples/16000.0}s, MaxTokens=$adaptiveMaxTokens")
                     
-                    // Adaptive logic: if RTF > 2.0, skip the next decode call
+                    // Adaptive logic:
+                    var changed = false
+                    if (it.lastRtf > 1.2) {
+                        // Throttling: Increase cadence and reduce token budget
+                        if (adaptiveMinDecodeSamples < SAMPLE_RATE * 4) {
+                            adaptiveMinDecodeSamples += (SAMPLE_RATE * 0.5).toInt()
+                            changed = true
+                        }
+                        if (adaptiveMaxTokens > 12) {
+                            adaptiveMaxTokens -= 4
+                            changed = true
+                        }
+                    } else if (it.lastRtf < 0.8) {
+                        // Relax: Gradually return to baseline (2.0s)
+                        if (adaptiveMinDecodeSamples > SAMPLE_RATE * 2) {
+                            adaptiveMinDecodeSamples -= (SAMPLE_RATE * 0.25).toInt()
+                            changed = true
+                        }
+                        if (adaptiveMaxTokens < 24) {
+                            adaptiveMaxTokens += 4
+                            changed = true
+                        }
+                    }
+
+                    if (changed) {
+                        Log.d(TAG, "Adapting parameters: Cadence=${adaptiveMinDecodeSamples/16000.0}s, MaxTokens=$adaptiveMaxTokens")
+                        scope.launch(nativeDispatcher) {
+                            initStreamInternal(
+                                maxBufferSamples = SAMPLE_RATE * 5, // Keep context at 5s baseline
+                                enableIncrementalEncoder = true,
+                                minDecodeSamples = adaptiveMinDecodeSamples,
+                                maxTokens = adaptiveMaxTokens
+                            )
+                        }
+                    }
+                    
                     if (it.lastRtf > 2.0) {
                         skipNextDecode = true
                     }
@@ -290,11 +330,12 @@ class VoxtralTranscriptionRepository @Inject constructor(
             }
 
             Log.d(TAG, "Running one-shot offline transcription on ${fullBuffer.size} samples...")
+            _partialText.value = "Saving... (Accurately transcribing full history...)"
 
             // 2. Call the one-shot transcribe API (no rolling window)
             // Use higher token budget for accuracy
             val finalText = withContext(nativeDispatcher) {
-                 voxtralJni.transcribe(handle, fullBuffer, 256)
+                 voxtralJni.transcribe(handle, fullBuffer, 192)
             }
             
             Log.i(TAG, "Final Transcription: $finalText")
