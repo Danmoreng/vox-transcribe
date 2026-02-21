@@ -7,7 +7,9 @@ set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(VOXTRAL_AUTO_DETECT_OPENCL OFF CACHE BOOL "" FORCE)
-set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+set(GGML_OPENCL ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_EMBED_KERNELS ON CACHE BOOL "" FORCE)
+set(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE BOOL "" FORCE)
 set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
 
 # Disable native optimizations that might break on ARM (e.g. -march=native)
@@ -20,7 +22,18 @@ set(VOXTRAL_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 # Force standard O3 optimization, avoid Ofast/ffast-math if they are causing issues
 add_compile_options(-O3 -fno-fast-math)
 
-# Add ggml submodule
+# --- OpenCL Support (via Submodules) ---
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# 1. Point ICD Loader to Headers
+set(OPENCL_ICD_LOADER_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../external/OpenCL-Headers" CACHE PATH "" FORCE)
+
+# 2. Add ICD Loader (creates 'OpenCL' target)
+# Disable installing ICD loader as we only need it for linking/bundling
+set(OPENCL_ICD_LOADER_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+add_subdirectory(../../../../external/OpenCL-ICD-Loader OpenCL-ICD-Loader EXCLUDE_FROM_ALL)
+
+# 3. Add ggml submodule
 add_subdirectory(../../../../external/voxtral/ggml ggml_build)
 
 # Add voxtral implementation as a static library

@@ -23,8 +23,10 @@ android {
                 cppFlags("")
                 abiFilters("arm64-v8a")
                 arguments(
-                    "-DGGML_OPENCL=OFF",
-                    "-DVOXTRAL_AUTO_DETECT_OPENCL=OFF",
+                    "-DGGML_OPENCL=ON",
+                    "-DVOXTRAL_AUTO_DETECT_OPENCL=ON",
+                    "-DGGML_OPENCL_EMBED_KERNELS=ON",
+                    "-DGGML_OPENCL_USE_ADRENO_KERNELS=ON",
                     "-DGGML_VULKAN=OFF",
                     "-DVOXTRAL_AUTO_DETECT_VULKAN=OFF"
                 )
@@ -54,6 +56,12 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+
+    packaging {
+        jniLibs {
+            excludes += "**/libOpenCL.so"
+        }
     }
 }
 

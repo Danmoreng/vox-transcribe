@@ -30,9 +30,10 @@ Java_com_example_voxtranscribe_data_VoxtralJni_init(JNIEnv *env, jobject thiz, j
         }
     };
 
-    voxtral_gpu_backend backend = static_cast<voxtral_gpu_backend>(gpuBackend);
+    // voxtral_gpu_backend backend = static_cast<voxtral_gpu_backend>(gpuBackend);
+    voxtral_gpu_backend backend = voxtral_gpu_backend::none; // FORCE CPU for verification
 
-    LOGI("Loading model from %s (GPU backend: %d, KV window: %d)", pathStr.c_str(), gpuBackend, kvWindow);
+    LOGI("Loading model from %s (Forcing CPU/None backend for verification)", pathStr.c_str());
     voxtral_model *model = voxtral_model_load_from_file(pathStr, logger, backend);
     if (!model) {
         LOGE("Failed to load model from %s", pathStr.c_str());
