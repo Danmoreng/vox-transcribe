@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Segment
+import com.mikepenz.markdown.m3.Markdown
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -264,12 +265,19 @@ fun InsightSection(title: String, content: String?) {
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = content ?: "Not yet generated",
-                modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (content == null) Color.Gray else MaterialTheme.colorScheme.onSurface
-            )
+            if (content == null) {
+                Text(
+                    text = "Not yet generated",
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray
+                )
+            } else {
+                Markdown(
+                    content,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }

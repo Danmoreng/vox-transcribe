@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.mikepenz.markdown.m3)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore)
     implementation(libs.litertlm)
