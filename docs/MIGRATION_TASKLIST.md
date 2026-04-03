@@ -9,7 +9,8 @@ This task list reflects the first actionable breakdown after researching Google 
 - [x] Clone and inspect `google-ai-edge/gallery` locally
 - [x] Document Gallery stack findings
 - [x] Document target Gemma architecture for `vox-transcribe`
-- [ ] Confirm the exact Gemma 4 artifacts and accepted file formats we will support for manual import
+- [x] Confirm the exact Gemma 4 artifacts and accepted file formats we will support for manual import
+  Decision: first pass accepts `.litertlm` files only, specifically `gemma-4-E2B-it.litertlm` and `gemma-4-E4B-it.litertlm`.
 - [x] Decide whether Hugging Face OAuth is required for those artifacts
   Decision: the app will not support in-app authentication or authenticated downloads; model acquisition happens outside the app.
 

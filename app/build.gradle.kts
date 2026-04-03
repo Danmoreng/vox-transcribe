@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.voxtranscribe"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -80,6 +80,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.datastore)
+    implementation(libs.litertlm)
     implementation(libs.mediapipe.genai)
     implementation(libs.mlkit.genai.prompt)
     implementation(libs.kotlinx.coroutines.play.services)

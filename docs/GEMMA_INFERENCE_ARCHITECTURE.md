@@ -56,6 +56,13 @@ Suggested metadata:
 
 This should live in app code, not in a remote allowlist for the first pass.
 
+First-pass accepted import artifacts should be exact and narrow:
+
+- `gemma-4-E2B-it.litertlm`
+- `gemma-4-E4B-it.litertlm`
+
+The first pass should accept `.litertlm` files only.
+
 ## Layer 2: Model Persistence and Download
 
 ### Persisted state
