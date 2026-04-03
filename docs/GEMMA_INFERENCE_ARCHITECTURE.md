@@ -67,6 +67,7 @@ The first pass accepts `.litertlm` files only.
 The app persists:
 
 - `selectedModelId`
+- `transcriptionLanguage`
 
 The selected model is durable across app restarts.
 
@@ -133,8 +134,10 @@ Responsibilities:
 
 Current operating point:
 
-- clip duration: `15s`
-- overlap: `3s`
+- minimum clip duration: `5s`
+- maximum clip duration: `20s`
+- silence-aware early cut after minimum duration
+- forced-cut overlap: `2s`
 - queue capacity: `4`
 - audio input: `16 kHz` mono
 
@@ -142,7 +145,13 @@ Current behavior:
 
 - audio-enabled LiteRT-LM sessions run on CPU for compatibility
 - if inference falls behind, clips are dropped and the UI shows a catch-up message
-- finalized transcript emission is one-clip delayed to improve overlap merging
+- clips that end on silence are finalized without overlap
+- clips that are force-cut at max duration keep short overlap and use delayed merge
+- the recording screen exposes realtime factor, throughput, queue depth, and dropped clips
+- transcription can be guided by a persisted language setting:
+  - `Auto`
+  - `German`
+  - `English`
 
 ## Layer 5: Preserved App Pipeline
 
@@ -163,8 +172,9 @@ The migration changed implementations behind these seams rather than rewriting t
 The scheduler:
 
 - captures raw audio continuously
-- emits bounded rolling clips
-- keeps overlap from the prior clip
+- emits bounded rolling clips using a sliding window
+- cuts early on silence after the minimum clip size
+- carries overlap only when a clip must be force-cut at maximum size
 - queues clips for sequential inference
 - limits backlog growth
 
@@ -181,7 +191,7 @@ Current cleanup includes:
 
 - whitespace normalization
 - prompt-echo stripping
-- normalized word-overlap matching
+- fuzzy normalized word-overlap matching
 - character-overlap fallback matching
 
 ### Current limitations
@@ -190,7 +200,7 @@ The current transcription path is already usable, but still has known weaknesses
 
 - some duplicate text still appears at clip boundaries
 - prompt echoes are reduced but not fully eliminated
-- clip cutting is fixed-window based rather than voice-activity-aware
+- silence thresholds and clip defaults still need tuning across devices and models
 
 ## Partial UI State
 
@@ -218,6 +228,7 @@ Prompt centralization is still a remaining cleanup task.
 Current durable settings are centered on:
 
 - selected Gemma model id
+- selected transcription language
 
 Obsolete settings and controls tied to the old architecture have been removed from the active app path.
 
@@ -231,6 +242,7 @@ Current screen responsibilities:
 - show installed/not installed state
 - import model files
 - select active model
+- select transcription language guidance
 - delete imported model files
 
 The following old controls are intentionally gone:
@@ -262,6 +274,6 @@ The biggest remaining tasks are:
 
 1. centralize prompt templates for text tasks
 2. improve transcription boundary handling and prompt-echo suppression
-3. improve degraded-mode and busy-state UX
-4. complete longer-session device verification
-5. compare `E2B` and `E4B` behavior on target devices
+3. tune silence-aware clip thresholds and model-specific live defaults
+4. improve degraded-mode and busy-state UX
+5. complete longer-session device verification and `E2B`/`E4B` comparison

@@ -9,6 +9,7 @@ import com.example.voxtranscribe.domain.TranscriptionRepository
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -55,12 +56,13 @@ class GemmaTranscriptionRepository @Inject constructor(
     private val _debugState = MutableStateFlow(TranscriptionDebugState())
     override val debugState: StateFlow<TranscriptionDebugState> = _debugState.asStateFlow()
 
-    private var clipChannel: Channel<ByteArray>? = null
+    private var clipChannel: Channel<ClipRequest>? = null
     private var captureJob: kotlinx.coroutines.Job? = null
     private var processingJob: kotlinx.coroutines.Job? = null
     private var currentClipBuffer = ByteArrayOutputStream()
     private var currentClipSamples = 0
     private var currentCarrySamples = 0
+    private var currentSilentSamples = 0
     private var recentTranscriptTail = ""
     private var pendingTranscript = ""
     private var droppedClipCount = 0
@@ -100,6 +102,7 @@ class GemmaTranscriptionRepository @Inject constructor(
         currentClipBuffer = ByteArrayOutputStream()
         currentClipSamples = 0
         currentCarrySamples = 0
+        currentSilentSamples = 0
         recentTranscriptTail = ""
         pendingTranscript = ""
         droppedClipCount = 0
@@ -119,11 +122,7 @@ class GemmaTranscriptionRepository @Inject constructor(
                 audioRecorder.audioFlow.collect { floatChunk ->
                     val pcmChunk = floatArrayToPcm16(floatChunk)
                     stateMutex.withLock {
-                        currentClipBuffer.write(pcmChunk)
-                        currentClipSamples += floatChunk.size
-                        if (currentClipSamples >= CLIP_SAMPLES) {
-                            enqueueCurrentClipLocked()
-                        }
+                        appendChunkLocked(floatChunk, pcmChunk)
                     }
                 }
             } catch (e: Exception) {
@@ -146,11 +145,12 @@ class GemmaTranscriptionRepository @Inject constructor(
         stateMutex.withLock {
             val newAudioSamples = currentClipSamples - currentCarrySamples
             if (newAudioSamples >= MIN_FINAL_NEW_AUDIO_SAMPLES) {
-                enqueueCurrentClipLocked()
+                enqueueCurrentClipLocked(ClipCutReason.FinalFlush)
             } else {
                 currentClipBuffer.reset()
                 currentClipSamples = 0
                 currentCarrySamples = 0
+                currentSilentSamples = 0
             }
         }
 
@@ -183,9 +183,9 @@ class GemmaTranscriptionRepository @Inject constructor(
 
     private suspend fun processQueuedClips() {
         val channel = clipChannel ?: return
-        for (clipBytes in channel) {
+        for (clip in channel) {
             try {
-                val clipDurationSeconds = clipDurationSeconds(clipBytes)
+                val clipDurationSeconds = clip.newAudioSeconds
                 queuedClipCount = (queuedClipCount - 1).coerceAtLeast(0)
                 updateDebugState(
                     status = if (queuedClipCount > 0) "Catching up" else "Processing",
@@ -194,7 +194,7 @@ class GemmaTranscriptionRepository @Inject constructor(
                 )
                 val startedAtNanos = System.nanoTime()
                 val transcript = runtimeManager.transcribeAudioClip(
-                    audioBytes = pcm16MonoToWav(clipBytes, SAMPLE_RATE),
+                    audioBytes = pcm16MonoToWav(clip.pcmBytes, SAMPLE_RATE),
                     previousTranscriptTail = null,
                     requestedGenerationTokens = TRANSCRIPTION_GENERATION_TOKENS,
                 ).cleanTranscript("")
@@ -202,17 +202,17 @@ class GemmaTranscriptionRepository @Inject constructor(
                 recordProcessingMetrics(clipDurationSeconds, processingMillis)
 
                 val currentTranscript = trimTrailingEchoAgainstRecentTail(transcript)
-                if (currentTranscript.isBlank()) {
-                    updateDebugState(
-                        status = if (queuedClipCount > 0) "Catching up" else "Recording",
-                        queuedClips = queuedClipCount,
-                    )
-                    continue
-                }
 
                 if (pendingTranscript.isBlank()) {
-                    pendingTranscript = currentTranscript
-                    _partialText.value = pendingTranscript
+                    if (currentTranscript.isNotBlank()) {
+                        if (clip.hasForwardOverlap) {
+                            pendingTranscript = currentTranscript
+                            _partialText.value = pendingTranscript
+                        } else {
+                            emitFinalTranscript(currentTranscript)
+                            _partialText.value = ""
+                        }
+                    }
                     updateDebugState(
                         status = if (queuedClipCount > 0) "Catching up" else "Recording",
                         queuedClips = queuedClipCount,
@@ -220,17 +220,31 @@ class GemmaTranscriptionRepository @Inject constructor(
                     continue
                 }
 
-                val finalizedPending = trimOverlapWithNextTranscript(
-                    pending = pendingTranscript,
-                    next = currentTranscript,
-                )
+                val finalizedPending = if (clip.hasOverlapFromPrevious && currentTranscript.isNotBlank()) {
+                    trimOverlapWithNextTranscript(
+                        pending = pendingTranscript,
+                        next = currentTranscript,
+                    )
+                } else {
+                    pendingTranscript
+                }
 
                 if (finalizedPending.isNotBlank()) {
                     emitFinalTranscript(finalizedPending)
                 }
 
-                pendingTranscript = currentTranscript
-                _partialText.value = pendingTranscript
+                pendingTranscript = ""
+                if (currentTranscript.isNotBlank()) {
+                    if (clip.hasForwardOverlap) {
+                        pendingTranscript = currentTranscript
+                        _partialText.value = pendingTranscript
+                    } else {
+                        emitFinalTranscript(currentTranscript)
+                        _partialText.value = ""
+                    }
+                } else {
+                    _partialText.value = ""
+                }
                 _engineState.value = EngineState.Ready
                 updateDebugState(
                     status = if (queuedClipCount > 0) "Catching up" else "Recording",
@@ -251,10 +265,34 @@ class GemmaTranscriptionRepository @Inject constructor(
         _partialText.value = ""
     }
 
-    private fun enqueueCurrentClipLocked() {
+    private fun appendChunkLocked(floatChunk: FloatArray, pcmChunk: ByteArray) {
+        currentClipBuffer.write(pcmChunk)
+        currentClipSamples += floatChunk.size
+        currentSilentSamples = updateSilentRunSamples(floatChunk, currentSilentSamples)
+
+        val newAudioSamples = currentClipSamples - currentCarrySamples
+        if (newAudioSamples >= MIN_CLIP_SAMPLES && currentSilentSamples >= SILENCE_HOLD_SAMPLES) {
+            enqueueCurrentClipLocked(ClipCutReason.Silence)
+            return
+        }
+
+        if (currentClipSamples >= MAX_CLIP_SAMPLES) {
+            enqueueCurrentClipLocked(ClipCutReason.MaxDuration)
+        }
+    }
+
+    private fun enqueueCurrentClipLocked(cutReason: ClipCutReason) {
         val clipBytes = currentClipBuffer.toByteArray()
         if (clipBytes.isNotEmpty()) {
-            val result = clipChannel?.trySend(clipBytes)
+            val hasForwardOverlap = cutReason == ClipCutReason.MaxDuration
+            val clipRequest = ClipRequest(
+                pcmBytes = clipBytes,
+                newAudioSamples = (currentClipSamples - currentCarrySamples).coerceAtLeast(0),
+                hasOverlapFromPrevious = currentCarrySamples > 0,
+                hasForwardOverlap = hasForwardOverlap,
+                cutReason = cutReason,
+            )
+            val result = clipChannel?.trySend(clipRequest)
             if (result?.isFailure == true) {
                 droppedClipCount += 1
                 Log.w(TAG, "Dropping clip due to backlog. droppedClipCount=$droppedClipCount")
@@ -271,13 +309,18 @@ class GemmaTranscriptionRepository @Inject constructor(
             }
         }
 
-        val overlapBytes = clipBytes.takeLast(OVERLAP_SAMPLES * BYTES_PER_SAMPLE).toByteArray()
         currentClipBuffer = ByteArrayOutputStream()
-        if (overlapBytes.isNotEmpty()) {
-            currentClipBuffer.write(overlapBytes)
+        if (cutReason == ClipCutReason.MaxDuration) {
+            val overlapBytes = clipBytes.takeLast(FORCED_OVERLAP_SAMPLES * BYTES_PER_SAMPLE).toByteArray()
+            if (overlapBytes.isNotEmpty()) {
+                currentClipBuffer.write(overlapBytes)
+            }
+            currentCarrySamples = overlapBytes.size / BYTES_PER_SAMPLE
+        } else {
+            currentCarrySamples = 0
         }
-        currentCarrySamples = overlapBytes.size / BYTES_PER_SAMPLE
         currentClipSamples = currentCarrySamples
+        currentSilentSamples = 0
     }
 
     private fun isModelReady(): Boolean {
@@ -301,6 +344,18 @@ class GemmaTranscriptionRepository @Inject constructor(
 
     private fun clipDurationSeconds(clipBytes: ByteArray): Double {
         return clipBytes.size.toDouble() / BYTES_PER_SAMPLE.toDouble() / SAMPLE_RATE.toDouble()
+    }
+
+    private fun updateSilentRunSamples(floatChunk: FloatArray, startingSilentRunSamples: Int): Int {
+        var silentRunSamples = startingSilentRunSamples
+        for (sample in floatChunk) {
+            silentRunSamples = if (abs(sample) <= SILENCE_AMPLITUDE_THRESHOLD) {
+                silentRunSamples + 1
+            } else {
+                0
+            }
+        }
+        return silentRunSamples
     }
 
     private fun recordProcessingMetrics(
@@ -417,6 +472,8 @@ class GemmaTranscriptionRepository @Inject constructor(
             .filterNot { it.startsWith("Return only the transcript", ignoreCase = true) }
             .filterNot { it.startsWith("Transcribe only the spoken audio", ignoreCase = true) }
             .joinToString(separator = "\n")
+            .replace(AUDIO_PROMPT_NO_CONTEXT, "", ignoreCase = true)
+            .replace("Return only the transcript for this audio clip.", "", ignoreCase = true)
             .trim()
 
         return if (
@@ -458,16 +515,10 @@ class GemmaTranscriptionRepository @Inject constructor(
             return transcript
         }
 
-        val maxOverlap = minOf(MAX_OVERLAP_WORDS, referenceTokens.size, currentTokens.size)
-        var matchedTokens = 0
-        for (candidate in maxOverlap downTo 1) {
-            val previousSuffix = referenceTokens.takeLast(candidate).map { normalizeToken(it) }
-            val currentPrefix = currentTokens.take(candidate).map { normalizeToken(it) }
-            if (previousSuffix == currentPrefix) {
-                matchedTokens = candidate
-                break
-            }
-        }
+        val matchedTokens = findWordOverlapLength(
+            suffixTokens = referenceTokens,
+            prefixTokens = currentTokens,
+        )
 
         if (matchedTokens == 0) {
             return trimCharacterPrefixOverlap(transcript, reference)
@@ -483,22 +534,57 @@ class GemmaTranscriptionRepository @Inject constructor(
             return transcript
         }
 
-        val maxOverlap = minOf(MAX_OVERLAP_WORDS, currentTokens.size, referenceTokens.size)
-        var matchedTokens = 0
-        for (candidate in maxOverlap downTo 1) {
-            val currentSuffix = currentTokens.takeLast(candidate).map { normalizeToken(it) }
-            val referencePrefix = referenceTokens.take(candidate).map { normalizeToken(it) }
-            if (currentSuffix == referencePrefix) {
-                matchedTokens = candidate
-                break
-            }
-        }
+        val matchedTokens = findWordOverlapLength(
+            suffixTokens = currentTokens,
+            prefixTokens = referenceTokens,
+        )
 
         if (matchedTokens == 0) {
             return transcript
         }
 
         return currentTokens.dropLast(matchedTokens).joinToString(" ").trim()
+    }
+
+    private fun findWordOverlapLength(
+        suffixTokens: List<String>,
+        prefixTokens: List<String>,
+    ): Int {
+        val maxOverlap = minOf(MAX_OVERLAP_WORDS, suffixTokens.size, prefixTokens.size)
+        for (candidate in maxOverlap downTo 1) {
+            val suffix = suffixTokens.takeLast(candidate).map { normalizeToken(it) }
+            val prefix = prefixTokens.take(candidate).map { normalizeToken(it) }
+            val similarities = suffix.zip(prefix).map { (left, right) ->
+                tokenSimilarity(left, right)
+            }
+            val strongMatches = similarities.count { it >= STRONG_TOKEN_MATCH_SCORE }
+            val averageScore = similarities.average()
+            if (
+                averageScore >= MIN_OVERLAP_AVERAGE_SCORE &&
+                strongMatches >= maxOf(1, candidate / 2)
+            ) {
+                return candidate
+            }
+        }
+        return 0
+    }
+
+    private fun tokenSimilarity(left: String, right: String): Double {
+        if (left.isBlank() || right.isBlank()) {
+            return 0.0
+        }
+        if (left == right) {
+            return 1.0
+        }
+        if (left.length >= 4 && right.length >= 4 && (left.contains(right) || right.contains(left))) {
+            return 0.85
+        }
+        val commonPrefix = left.commonPrefixWith(right)
+        val minimumLength = minOf(left.length, right.length)
+        if (minimumLength >= 4 && commonPrefix.length.toDouble() / minimumLength.toDouble() >= 0.8) {
+            return 0.75
+        }
+        return 0.0
     }
 
     private fun trimCharacterPrefixOverlap(transcript: String, reference: String): String {
@@ -626,22 +712,46 @@ class GemmaTranscriptionRepository @Inject constructor(
         val rawIndexByNormalizedPosition: IntArray,
     )
 
+    private data class ClipRequest(
+        val pcmBytes: ByteArray,
+        val newAudioSamples: Int,
+        val hasOverlapFromPrevious: Boolean,
+        val hasForwardOverlap: Boolean,
+        val cutReason: ClipCutReason,
+    ) {
+        val newAudioSeconds: Double
+            get() = newAudioSamples.toDouble() / SAMPLE_RATE.toDouble()
+    }
+
+    private enum class ClipCutReason {
+        Silence,
+        MaxDuration,
+        FinalFlush,
+    }
+
     private companion object {
         const val TAG = "GemmaTranscription"
         const val SAMPLE_RATE = 16_000
         const val BYTES_PER_SAMPLE = 2
-        const val CLIP_DURATION_SECONDS = 15
-        const val CLIP_SAMPLES = SAMPLE_RATE * CLIP_DURATION_SECONDS
-        const val OVERLAP_SECONDS = 3
-        const val OVERLAP_SAMPLES = SAMPLE_RATE * OVERLAP_SECONDS
+        const val MIN_CLIP_SECONDS = 5
+        const val MIN_CLIP_SAMPLES = SAMPLE_RATE * MIN_CLIP_SECONDS
+        const val MAX_CLIP_SECONDS = 20
+        const val MAX_CLIP_SAMPLES = SAMPLE_RATE * MAX_CLIP_SECONDS
+        const val FORCED_OVERLAP_SECONDS = 2
+        const val FORCED_OVERLAP_SAMPLES = SAMPLE_RATE * FORCED_OVERLAP_SECONDS
         const val MIN_FINAL_NEW_AUDIO_SAMPLES = SAMPLE_RATE
         const val CLIP_CHANNEL_CAPACITY = 4
         const val TRANSCRIPTION_GENERATION_TOKENS = 256
         const val WAV_HEADER_SIZE = 44
         const val MAX_OVERLAP_WORDS = 24
+        const val STRONG_TOKEN_MATCH_SCORE = 0.75
+        const val MIN_OVERLAP_AVERAGE_SCORE = 0.75
         const val RECENT_TAIL_WORDS = 80
         const val MIN_CHARACTER_OVERLAP = 20
         const val MAX_CHARACTER_OVERLAP = 160
+        const val SILENCE_HOLD_MILLIS = 350
+        const val SILENCE_HOLD_SAMPLES = SAMPLE_RATE * SILENCE_HOLD_MILLIS / 1000
+        const val SILENCE_AMPLITUDE_THRESHOLD = 0.015f
         const val AUDIO_PROMPT_NO_CONTEXT = "Return only the transcript for this audio clip."
         val WORD_SPLIT_REGEX = Regex("\\s+")
     }

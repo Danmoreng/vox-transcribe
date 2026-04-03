@@ -7,6 +7,7 @@ This task list now reflects the current branch state rather than the initial mig
 Completed at this point:
 
 - Gemma manual import and model selection are working
+- transcription language guidance is working
 - Gemma text processing is working on device
 - Gemma live transcription is working on device
 - the old app-module Voxtral/JNI/CMake inference path has been removed
@@ -56,6 +57,7 @@ Decision:
 - [x] Create `GemmaModelCatalog`
 - [x] Create `GemmaSettingsRepository`
 - [x] Persist `selectedModelId`
+- [x] Persist transcription language preference
 - [x] Create `GemmaImportRepository`
 - [x] Store models in app-managed external storage
 - [x] Add strict import validation for supported Gemma artifacts
@@ -90,9 +92,12 @@ Decision:
 - [x] Add first-pass clip-result deduplication and merge heuristics
 - [x] Bound queue growth and define overflow behavior
 - [x] Force CPU-only audio path for current device compatibility
+- [x] Add silence-aware sliding clip cuts with overlap only on forced cuts
+- [x] Add realtime-factor and backlog debug metrics to the recording UI
+- [x] Add transcription language guidance with `Auto` / fixed-language modes
 - [ ] Improve duplicate suppression at clip boundaries
 - [ ] Strip remaining prompt echoes more aggressively
-- [ ] Consider voice-activity-aware or sentence-aware clip cutting
+- [ ] Tune silence thresholds and model-specific live defaults
 
 ## Phase 7: Rewire Existing App Flow
 
@@ -109,6 +114,7 @@ Decision:
 - [x] Verify selected model persists across app restarts
 - [x] Verify summary generation on stored transcripts
 - [x] Verify live transcription on device
+- [x] Verify fixed-language transcription guidance improves output quality
 - [ ] Verify long-form recording over at least 5 minutes
 - [ ] Verify backlog behavior when inference falls behind real time
 - [ ] Verify behavior when app backgrounds during transcription
@@ -117,6 +123,6 @@ Decision:
 ## Immediate Next Tasks
 
 1. Tighten transcription boundary cleanup and prompt-echo suppression.
-2. Improve recording-state and degraded-mode UX.
-3. Run a longer on-device verification pass for transcription stability.
-4. Compare `E2B` and `E4B` on target devices.
+2. Tune silence-aware clip thresholds and model-specific transcription defaults.
+3. Improve recording-state and degraded-mode UX.
+4. Run longer on-device verification for `E2B` and `E4B`.
