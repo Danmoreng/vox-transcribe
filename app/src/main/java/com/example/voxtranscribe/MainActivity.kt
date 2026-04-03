@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
                         voxtralRepo = voxtralRepo,
                         modelManager = modelManager,
                         onNavigateToSettings = {
-                            navController.navigate(Screen.VoxtralModel.route)
+                            navController.navigate(Screen.GemmaModel.route)
                         }
                     )
                     

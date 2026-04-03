@@ -7,7 +7,7 @@ import androidx.navigation.compose.composable
 import com.example.voxtranscribe.ui.screens.HomeScreen
 import com.example.voxtranscribe.ui.screens.RecordingScreen
 import com.example.voxtranscribe.ui.screens.DetailScreen
-import com.example.voxtranscribe.ui.screens.VoxtralModelScreen
+import com.example.voxtranscribe.ui.screens.GemmaModelScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 
@@ -17,7 +17,7 @@ sealed class Screen(val route: String) {
     object Detail : Screen("detail/{noteId}") {
         fun createRoute(noteId: Long) = "detail/$noteId"
     }
-    object VoxtralModel : Screen("voxtral_model")
+    object GemmaModel : Screen("gemma_model")
 }
 
 @Composable
@@ -32,7 +32,7 @@ fun VoxNavGraph(navController: NavHostController) {
                 onNavigateToDetail = { noteId -> 
                     navController.navigate(Screen.Detail.createRoute(noteId))
                 },
-                onNavigateToVoxtral = { navController.navigate(Screen.VoxtralModel.route) }
+                onNavigateToModelSettings = { navController.navigate(Screen.GemmaModel.route) }
             )
         }
         composable(Screen.Record.route) {
@@ -50,8 +50,8 @@ fun VoxNavGraph(navController: NavHostController) {
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable(Screen.VoxtralModel.route) {
-            VoxtralModelScreen(
+        composable(Screen.GemmaModel.route) {
+            GemmaModelScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

@@ -26,7 +26,7 @@ import java.util.*
 fun HomeScreen(
     onNavigateToRecord: () -> Unit,
     onNavigateToDetail: (Long) -> Unit,
-    onNavigateToVoxtral: () -> Unit,
+    onNavigateToModelSettings: () -> Unit,
     viewModel: TranscriptionViewModel = hiltViewModel()
 ) {
     val notes by viewModel.allNotes.collectAsStateWithLifecycle()
@@ -62,7 +62,7 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("Vox Transcribe") },
                 actions = {
-                    IconButton(onClick = onNavigateToVoxtral) {
+                    IconButton(onClick = onNavigateToModelSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
