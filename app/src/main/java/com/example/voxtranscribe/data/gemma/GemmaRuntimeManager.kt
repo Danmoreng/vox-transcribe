@@ -1,5 +1,6 @@
 package com.example.voxtranscribe.data.gemma
 
+import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -118,16 +119,13 @@ class GemmaRuntimeManager @Inject constructor(
 
         closeEngine()
 
-        val backendsToTry = if (enableAudio) {
-            listOf(Backend.CPU())
-        } else {
-            listOf(Backend.GPU(), Backend.CPU())
-        }
-        var lastError: Exception? = null
+        val backendsToTry = listOf(Backend.CPU())
+        var lastError: Throwable? = null
 
         for (backend in backendsToTry) {
+            var createdEngine: Engine? = null
             try {
-                val createdEngine = Engine(
+                createdEngine = Engine(
                     EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
@@ -142,8 +140,10 @@ class GemmaRuntimeManager @Inject constructor(
                 loadedContextTokens = requiredContextTokens
                 loadedAudioEnabled = enableAudio
                 return
-            } catch (e: Exception) {
-                lastError = e
+            } catch (t: Throwable) {
+                runCatching { createdEngine?.close() }
+                Log.w(TAG, "Failed to initialize Gemma engine with backend=$backend", t)
+                lastError = t
             }
         }
 
@@ -249,6 +249,7 @@ class GemmaRuntimeManager @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "GemmaRuntimeManager"
         private const val DEFAULT_GENERATION_TOKENS = 1024
         private const val DEFAULT_AUDIO_GENERATION_TOKENS = 256
         private const val MIN_CONTEXT_TOKENS = 2048

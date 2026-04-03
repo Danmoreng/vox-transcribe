@@ -41,13 +41,11 @@ class GemmaModelViewModel @Inject constructor(
     private val _isImporting = MutableStateFlow(false)
     private val _message = MutableStateFlow<String?>(null)
 
-    val uiState: StateFlow<GemmaModelUiState> = combine(
+    private val settingsUiState = combine(
         importRepository.modelStatuses,
         settingsRepository.selectedModelId,
         settingsRepository.transcriptionLanguage,
-        _isImporting,
-        _message,
-    ) { statuses, selectedModelId, transcriptionLanguage, isImporting, message ->
+    ) { statuses, selectedModelId, transcriptionLanguage ->
         val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
         val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
         GemmaModelUiState(
@@ -59,6 +57,15 @@ class GemmaModelViewModel @Inject constructor(
             },
             selectedModelId = resolvedSelectedModelId,
             transcriptionLanguage = transcriptionLanguage,
+        )
+    }
+
+    val uiState: StateFlow<GemmaModelUiState> = combine(
+        settingsUiState,
+        _isImporting,
+        _message,
+    ) { baseState, isImporting, message ->
+        baseState.copy(
             isImporting = isImporting,
             message = message,
         )
