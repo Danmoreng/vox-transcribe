@@ -25,6 +25,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.ui.GemmaModelCardUiState
 import com.example.voxtranscribe.ui.GemmaModelViewModel
+import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
 import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +104,31 @@ fun GemmaModelScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Transcription Language",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Use Auto for mixed or unknown speech. If you know the spoken language, selecting it can reduce language drift and instruction leakage during transcription.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GemmaTranscriptionLanguage.entries.forEach { language ->
+                    FilterChip(
+                        selected = uiState.transcriptionLanguage == language,
+                        onClick = { viewModel.setTranscriptionLanguage(language) },
+                        label = { Text(language.displayName) },
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { launcher.launch("*/*") },

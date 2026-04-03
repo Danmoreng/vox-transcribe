@@ -67,6 +67,7 @@ class GemmaRuntimeManager @Inject constructor(
             val modelPath = importRepository.getImportedModelPath(selectedModelId)
                 ?: throw IllegalStateException("The selected Gemma model is not imported.")
             val requiredContextTokens = requiredContextTokens(requestedGenerationTokens)
+            val transcriptionLanguage = settingsRepository.transcriptionLanguage.value
 
             ensureEngineLoaded(
                 modelId = selectedModelId,
@@ -77,7 +78,7 @@ class GemmaRuntimeManager @Inject constructor(
 
             val conversation = createConversation(
                 audioMode = true,
-                systemInstruction = DEFAULT_AUDIO_SYSTEM_INSTRUCTION,
+                systemInstruction = buildAudioSystemInstruction(transcriptionLanguage),
             )
             try {
                 runConversation(
@@ -234,6 +235,19 @@ class GemmaRuntimeManager @Inject constructor(
         }
     }
 
+    private fun buildAudioSystemInstruction(
+        language: GemmaTranscriptionLanguage,
+    ): String {
+        val languageLabel = language.promptLabel
+        return if (languageLabel == null) {
+            DEFAULT_AUDIO_SYSTEM_INSTRUCTION
+        } else {
+            "Transcribe only the spoken audio. The spoken language is $languageLabel. " +
+                "Return only the spoken words in $languageLabel. Do not translate. " +
+                "Do not explain. Do not answer the speaker. Do not repeat instructions or prior context."
+        }
+    }
+
     companion object {
         private const val DEFAULT_GENERATION_TOKENS = 1024
         private const val DEFAULT_AUDIO_GENERATION_TOKENS = 256
@@ -241,7 +255,7 @@ class GemmaRuntimeManager @Inject constructor(
         private const val CONTEXT_HEADROOM_TOKENS = 512
         private const val DEFAULT_AUDIO_SYSTEM_INSTRUCTION =
             "Transcribe only the spoken audio. Preserve the original language. " +
-                "Return only the spoken words. Do not translate. Do not explain. " +
+                "Return only the spoken words. Do not translate. Do not explain. Do not answer the speaker. " +
                 "Do not repeat instructions or prior context."
         private const val AUDIO_USER_PROMPT_NO_CONTEXT =
             "Return only the transcript for this audio clip."

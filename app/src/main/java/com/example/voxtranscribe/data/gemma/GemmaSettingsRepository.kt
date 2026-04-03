@@ -19,6 +19,9 @@ class GemmaSettingsRepository @Inject constructor(
     private val _selectedModelId = MutableStateFlow(readSelectedModelId())
     val selectedModelId: StateFlow<GemmaModelId?> = _selectedModelId.asStateFlow()
 
+    private val _transcriptionLanguage = MutableStateFlow(readTranscriptionLanguage())
+    val transcriptionLanguage: StateFlow<GemmaTranscriptionLanguage> = _transcriptionLanguage.asStateFlow()
+
     fun getSelectedModelSpec(): GemmaModelSpec? {
         return _selectedModelId.value?.let { selectedId ->
             GemmaModelCatalog.supportedModels.firstOrNull { it.id == selectedId }
@@ -34,13 +37,30 @@ class GemmaSettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setTranscriptionLanguage(language: GemmaTranscriptionLanguage) {
+        withContext(Dispatchers.IO) {
+            prefs.edit()
+                .putString(KEY_TRANSCRIPTION_LANGUAGE, language.name)
+                .apply()
+            _transcriptionLanguage.value = language
+        }
+    }
+
     private fun readSelectedModelId(): GemmaModelId? {
         val storedValue = prefs.getString(KEY_SELECTED_MODEL_ID, null) ?: return null
         return GemmaModelId.entries.firstOrNull { it.name == storedValue }
     }
 
+    private fun readTranscriptionLanguage(): GemmaTranscriptionLanguage {
+        val storedValue = prefs.getString(KEY_TRANSCRIPTION_LANGUAGE, null)
+            ?: return GemmaTranscriptionLanguage.AUTO
+        return GemmaTranscriptionLanguage.entries.firstOrNull { it.name == storedValue }
+            ?: GemmaTranscriptionLanguage.AUTO
+    }
+
     private companion object {
         const val PREFS_NAME = "gemma_settings"
         const val KEY_SELECTED_MODEL_ID = "selected_model_id"
+        const val KEY_TRANSCRIPTION_LANGUAGE = "transcription_language"
     }
 }

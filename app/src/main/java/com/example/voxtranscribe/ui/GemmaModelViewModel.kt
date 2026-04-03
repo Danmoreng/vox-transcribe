@@ -8,6 +8,7 @@ import com.example.voxtranscribe.data.gemma.GemmaImportResult
 import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaModelId
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
+import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ data class GemmaModelCardUiState(
 data class GemmaModelUiState(
     val models: List<GemmaModelCardUiState> = emptyList(),
     val selectedModelId: GemmaModelId? = null,
+    val transcriptionLanguage: GemmaTranscriptionLanguage = GemmaTranscriptionLanguage.AUTO,
     val isImporting: Boolean = false,
     val message: String? = null,
 )
@@ -42,9 +44,10 @@ class GemmaModelViewModel @Inject constructor(
     val uiState: StateFlow<GemmaModelUiState> = combine(
         importRepository.modelStatuses,
         settingsRepository.selectedModelId,
+        settingsRepository.transcriptionLanguage,
         _isImporting,
         _message,
-    ) { statuses, selectedModelId, isImporting, message ->
+    ) { statuses, selectedModelId, transcriptionLanguage, isImporting, message ->
         val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
         val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
         GemmaModelUiState(
@@ -55,6 +58,7 @@ class GemmaModelViewModel @Inject constructor(
                 )
             },
             selectedModelId = resolvedSelectedModelId,
+            transcriptionLanguage = transcriptionLanguage,
             isImporting = isImporting,
             message = message,
         )
@@ -116,6 +120,13 @@ class GemmaModelViewModel @Inject constructor(
             } else {
                 _message.value = "Failed to remove the imported model."
             }
+        }
+    }
+
+    fun setTranscriptionLanguage(language: GemmaTranscriptionLanguage) {
+        viewModelScope.launch {
+            settingsRepository.setTranscriptionLanguage(language)
+            _message.value = "Transcription language set to ${language.displayName}."
         }
     }
 
