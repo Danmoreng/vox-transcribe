@@ -6,7 +6,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.example.voxtranscribe.ui.navigation.VoxNavGraph
@@ -28,7 +29,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             VoxTranscribeTheme {
                 val navController = rememberNavController()
-                Box(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
                     VoxNavGraph(navController = navController)
                 }
             }
