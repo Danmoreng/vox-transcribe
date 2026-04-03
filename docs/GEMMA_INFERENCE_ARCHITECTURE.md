@@ -2,171 +2,151 @@
 
 ## Goal
 
-Define the target runtime architecture for migrating `vox-transcribe` from:
+This document describes the current Gemma-based runtime architecture for `vox-transcribe`.
 
-- `voxtral.cpp` for transcription
-- MediaPipe `LlmInference` for text tasks
+The project direction is now:
 
-to:
+- one Gemma runtime stack based on LiteRT-LM
+- one selected imported model (`E2B` or `E4B`)
+- one Android-side architecture for both live transcription and text processing
 
-- one Gemma runtime stack based on LiteRT LM
-- one selected model (`E2B` or `E4B`)
-- one shared Android-side architecture for both transcription and text processing
-
-## Design Constraints
+## Current Design Constraints
 
 - preserve the existing Compose UI and product identity
 - preserve Room note and transcript persistence
 - preserve foreground-service ownership for recording sessions
-- support manual in-app model import
-- support long-form meetings even though model audio input is bounded
+- support manual in-app model import only
+- support long-form meetings even though audio inference is clip-based
 - avoid reintroducing native/JNI inference complexity
+
+## Current Implementation Snapshot
+
+Implemented core pieces:
+
+- `GemmaModelCatalog`
+- `GemmaSettingsRepository`
+- `GemmaImportRepository`
+- `GemmaRuntimeManager`
+- `GemmaAiRepository`
+- `GemmaTranscriptionRepository`
+- `GemmaModelViewModel`
+- `GemmaModelScreen`
+
+The old app-module JNI/CMake runtime path has already been removed.
 
 ## Architecture Overview
 
-The target design has five layers:
+The current design has five layers:
 
-1. Model catalog and persistence
-2. Model import and install state
-3. Shared Gemma runtime ownership
-4. Task-specific repositories
-5. Existing service/UI/database pipeline
+1. model catalog and persistence
+2. model import and install state
+3. shared Gemma runtime ownership
+4. task-specific repositories
+5. preserved service/UI/database pipeline
 
 ## Layer 1: Model Catalog
 
-Introduce a small model catalog owned by the app.
+The app owns a small static model catalog in code.
 
-Suggested type:
+Supported ids:
 
-- `GemmaModelId`
-  - `GEMMA_4_E2B`
-  - `GEMMA_4_E4B`
+- `GEMMA_4_E2B`
+- `GEMMA_4_E4B`
 
-Suggested metadata:
-
-- stable id
-- display name
-- remote URL
-- file name
-- version / commit
-- size bytes
-- min RAM requirement
-- supports audio
-- supports text
-
-This should live in app code, not in a remote allowlist for the first pass.
-
-First-pass accepted import artifacts should be exact and narrow:
+Current accepted import artifacts:
 
 - `gemma-4-E2B-it.litertlm`
 - `gemma-4-E4B-it.litertlm`
 
-The first pass should accept `.litertlm` files only.
+The first pass accepts `.litertlm` files only.
 
-## Layer 2: Model Persistence and Download
+## Layer 2: Model Persistence and Import
 
 ### Persisted state
 
-Create persistent settings for:
+The app persists:
 
 - `selectedModelId`
-- per-model import/install state if needed
 
-Unlike Gallery, selected model must be durable.
+The selected model is durable across app restarts.
 
 ### Import subsystem
 
-Create:
+Current import path:
 
-- `GemmaImportRepository`
-- `GemmaModelStore`
+- user selects a local file or URI
+- the app validates the file name against the supported catalog
+- the file is copied into app-managed external storage
+- install state is exposed back to the UI
 
-Responsibilities:
+The app intentionally does not implement:
 
-- import model from a user-selected local file or URI into `externalFilesDir/{normalizedName}/{version}/{fileName}`
-- validate file type, metadata, and compatibility
-- support replace / reimport / delete
-- expose install state as observable app state
-
-The current `ModelDownloadManager` should be removed rather than evolved in place.
+- in-app download
+- OAuth
+- token handling
 
 ## Layer 3: Shared Runtime Ownership
 
-This is the most important architectural decision.
-
-Create one runtime owner:
-
-- `GemmaRuntimeManager`
+`GemmaRuntimeManager` owns LiteRT-LM runtime access.
 
 Responsibilities:
 
-- load the selected model
-- own the LiteRT `Engine`
-- create and reset LiteRT `Conversation` objects
-- serialize access to the runtime
-- expose initialization state
-- tear down runtime cleanly when model changes or app requests cleanup
+- resolve the selected imported model
+- initialize the LiteRT-LM engine
+- serialize model access
+- create task-specific conversations
+- recreate the engine when model or runtime requirements change
 
-Why this layer is needed:
-
-- Gallery is conversation-centric and informal about ownership
-- `vox-transcribe` has a foreground service plus UI plus background text tasks
-- we need stricter control over runtime access and lifecycle
-
-### Required policy
-
-The first implementation should assume:
+Current policy:
 
 - one active model loaded at a time
-- one active inference job at a time
+- one inference job at a time
 
-That is the simplest correct policy.
-
-If a recording is active:
-
-- transcription owns the runtime
-- summary generation should either queue or fail with a clear busy state
-
-This is stricter than Gallery, but more appropriate for a focused meeting app.
+This is intentionally strict because the app combines foreground recording with post-processing tasks.
 
 ## Layer 4: Task-Specific Repositories
 
-### A. `GemmaTranscriptionRepository`
+### `GemmaAiRepository`
 
-This replaces:
+Responsibilities:
 
-- `VoxtralTranscriptionRepository`
-- `AndroidSpeechRecognizerImpl`
-- `DynamicTranscriptionRepository`
+- title generation
+- summary generation
+- meeting notes generation
+
+Current notes:
+
+- text tasks are already working on device
+- text inference uses the shared runtime manager
+- the current implementation still needs prompt-template centralization
+
+### `GemmaTranscriptionRepository`
 
 Responsibilities:
 
 - use `AudioRecorder`
-- accumulate microphone audio into bounded clips
-- enforce 16 kHz mono PCM clip contract
-- optionally add clip overlap
-- wrap clip PCM into WAV bytes if required by runtime
-- submit clips sequentially to `GemmaRuntimeManager`
-- convert model responses into transcript segments
-- emit partial and final text through `TranscriptionRepository`
+- collect microphone audio into rolling clips
+- keep overlap between adjacent clips
+- wrap PCM into WAV for LiteRT-LM audio input
+- submit clips sequentially through `GemmaRuntimeManager`
+- merge adjacent clip transcripts into finalized segments
 
-### B. `GemmaAiRepository`
+Current operating point:
 
-This replaces:
+- clip duration: `15s`
+- overlap: `3s`
+- queue capacity: `4`
+- audio input: `16 kHz` mono
 
-- `MediaPipeAiRepository`
+Current behavior:
 
-Responsibilities:
-
-- run summary generation
-- run meeting notes generation
-- run title generation
-- share the selected model from `GemmaRuntimeManager`
-- own prompt templates and task-specific formatting
+- audio-enabled LiteRT-LM sessions run on CPU for compatibility
+- if inference falls behind, clips are dropped and the UI shows a catch-up message
+- finalized transcript emission is one-clip delayed to improve overlap merging
 
 ## Layer 5: Preserved App Pipeline
 
-These existing pieces should stay structurally intact:
+These existing pieces remain structurally intact:
 
 - `TranscriptionService`
 - `TranscriptionViewModel`
@@ -174,169 +154,114 @@ These existing pieces should stay structurally intact:
 - Room entities and DAOs
 - note list and detail screens
 
-The migration should change implementations behind these seams, not rewrite the product from scratch.
+The migration changed implementations behind these seams rather than rewriting the product.
 
 ## Long-Form Transcription Design
 
-## Clip Scheduler
+### Clip scheduler
 
-Use `AudioRecorder` as the source of raw audio flow.
+The scheduler:
 
-Build a scheduler that:
-
-- collects audio continuously
-- emits clips at a fixed target duration
-- optionally includes overlap from the previous clip
+- captures raw audio continuously
+- emits bounded rolling clips
+- keeps overlap from the prior clip
 - queues clips for sequential inference
-- backpressures when inference falls behind
+- limits backlog growth
 
-Suggested initial operating point:
+### Output handling
 
-- clip duration: `20s`
-- overlap: `3s`
-- mono 16 kHz PCM
+The current merge strategy is:
 
-These are starting values only and must be tuned empirically.
+- keep one pending clip transcript
+- use the next clip to trim overlap from the pending clip
+- emit the stable portion of the older clip
+- emit the final pending clip when recording stops
 
-## Output Handling
+Current cleanup includes:
 
-For each clip:
+- whitespace normalization
+- prompt-echo stripping
+- normalized word-overlap matching
+- character-overlap fallback matching
 
-- send clip to Gemma
-- receive model response
-- normalize whitespace and formatting
-- deduplicate against the trailing text from the previous finalized segment
-- store a finalized segment when safe
+### Current limitations
 
-Two output models are plausible:
+The current transcription path is already usable, but still has known weaknesses:
 
-- one DB segment per processed clip
-- smaller logical segments extracted from the clip response
-
-The first pass should use:
-
-- one finalized segment per processed clip
-
-That is simpler and easier to debug.
+- some duplicate text still appears at clip boundaries
+- prompt echoes are reduced but not fully eliminated
+- clip cutting is fixed-window based rather than voice-activity-aware
 
 ## Partial UI State
 
-The UI currently expects:
+The existing UI contract is preserved:
 
-- `partialText`
-- finalized log entries via `transcriptionState`
+- `partialText` is used for the current in-flight or pending clip text
+- finalized transcript entries continue to flow through `transcriptionState`
 
-The transcription repository should provide:
-
-- `partialText` as the latest in-flight clip result or queue-progress message
-- `transcriptionState` only for finalized segments
-
-This keeps the existing screens usable without redesign.
-
-## Failure and Backpressure Policy
-
-If inference is slower than recording:
-
-- clip queue must be bounded
-- queue overflow must surface an explicit degraded-mode error
-- the service must not grow memory without bound
-
-Suggested first-pass rule:
-
-- max queued clips: `2`
-- if queue is full:
-  - drop oldest pending non-processing clip
-  - emit a diagnostic state entry
-
-This is better than unbounded memory growth.
+This allows the current recording UI to keep working without a redesign.
 
 ## Text Task Design
 
-Text tasks should be implemented as single-turn requests against the selected model.
+Text tasks are implemented as single-turn requests against the selected model.
 
-Suggested prompt-owned operations:
+Current prompt-owned operations:
 
 - executive summary
 - meeting notes
 - title generation
-- action items
 
-Prompt templates should live centrally, not inline inside UI code.
-
-Suggested type:
-
-- `GemmaPromptTemplates`
-
-This makes future tuning easy.
+Prompt centralization is still a remaining cleanup task.
 
 ## Data and Settings Changes
 
-Add new durable settings for:
+Current durable settings are centered on:
 
-- selected model id
-- model install/import progress snapshots if useful
-- optional access token
-- TOU acceptance
+- selected Gemma model id
 
-Remove obsolete persisted behavior tied to:
-
-- Voxtral model import
-- backend selection
-- engine switching
+Obsolete settings and controls tied to the old architecture have been removed from the active app path.
 
 ## UI Mapping
 
-Replace the existing model-management screen with a Gemma-focused screen.
+The old model-management surface has been replaced with a Gemma-focused screen.
 
-The current `VoxtralModelScreen` should evolve into:
+Current screen responsibilities:
 
-- selected model
-- installed/not installed state
-- import / replace / delete actions
-- model requirements
-- load / ready / busy state
+- show supported models
+- show installed/not installed state
+- import model files
+- select active model
+- delete imported model files
 
-Do not carry forward:
+The following old controls are intentionally gone:
 
-- CPU / Auto / Vulkan / OpenCL controls
-- test-recording controls specific to Voxtral
+- backend selection
+- native engine loading controls
 - `.gguf` import workflow
 
-## Dependency and Platform Changes
+## Dependency and Platform State
 
-Expected changes:
+Current platform assumptions:
 
-- raise `minSdk` to `31`
-- remove CMake/JNI/native build wiring
-- remove `libs.mediapipe.genai` and `libs.mlkit.genai.prompt` if fully superseded
-- add LiteRT LM centered dependency set
-- add WorkManager / AppAuth / DataStore pieces as needed
+- `minSdk 31`
+- no app-module JNI/CMake/native inference code
+- LiteRT-LM runtime dependency in Kotlin code
+- DataStore for persisted settings
+- WorkManager still available in the dependency set
 
-## Proposed New Types
-
-Suggested first-pass type layout:
-
-- `data/gemma/GemmaModelCatalog.kt`
-- `data/gemma/GemmaSettingsRepository.kt`
-- `data/gemma/GemmaImportRepository.kt`
-- `data/gemma/GemmaRuntimeManager.kt`
-- `data/gemma/GemmaTranscriptionRepository.kt`
-- `data/gemma/GemmaAiRepository.kt`
-- `ui/GemmaModelViewModel.kt`
-- `ui/screens/GemmaModelScreen.kt`
-
-## First-Pass Non-Goals
+## Non-Goals
 
 - multiple simultaneously loaded models
-- imported arbitrary custom models
-- benchmark features
-- generic task marketplace behavior
-- streaming token-level ASR semantics
+- arbitrary custom model compatibility
+- token-level streaming ASR semantics
+- in-app authenticated downloads
 
-## Implementation Order
+## Remaining Work
 
-1. Add settings/model catalog/import architecture.
-2. Add `GemmaRuntimeManager`.
-3. Migrate text tasks first.
-4. Migrate clip-based transcription second.
-5. Remove Voxtral/native code once replacement seams compile cleanly.
+The biggest remaining tasks are:
+
+1. centralize prompt templates for text tasks
+2. improve transcription boundary handling and prompt-echo suppression
+3. improve degraded-mode and busy-state UX
+4. complete longer-session device verification
+5. compare `E2B` and `E4B` behavior on target devices

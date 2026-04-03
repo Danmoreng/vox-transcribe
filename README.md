@@ -1,63 +1,87 @@
-# Vox Transcribe - Private Offline Meeting Assistant
+# Vox Transcribe
 
-Vox Transcribe is a privacy-first, offline-only Android application designed to transcribe and summarize meetings entirely on your device. By leveraging local AI models (Voxtral for transcription and Gemma/Gemini Nano for summarization), Vox Transcribe ensures your conversations never leave your phone.
+Vox Transcribe is a privacy-first, offline-only Android meeting assistant. The current branch is built around Gemma 4 running through LiteRT-LM for both live transcription and post-processing tasks such as title generation, summaries, and meeting notes.
 
-## Features
+## Current Direction
 
-*   **Offline Transcription**: High-fidelity speech-to-text using the **Voxtral** engine (C++ port of Mistral's model) running locally via NDK/JNI.
-*   **AI Summarization**: Generate executive summaries and action items using on-device LLMs (MediaPipe GenAI / ML Kit).
-*   **Privacy First**: No cloud processing, no data leaks. All data is stored in a local encrypted database (Room).
-*   **Background Recording**: Reliable long-form recording using a Foreground Service.
-*   **Modern UI**: Built with Jetpack Compose and Material 3.
+- offline transcription with Gemma 4 audio-capable LiteRT-LM models
+- offline text processing with the same selected Gemma model
+- manual model import only
+- no cloud processing, no in-app authentication, no token handling
+- existing Android UI, Room persistence, and foreground recording service preserved
 
-## Architecture
+## Current Stack
 
-*   **Language**: Kotlin
-*   **UI Toolkit**: Jetpack Compose
-*   **DI**: Hilt
-*   **Persistence**: Room Database
-*   **Transcription Engine**: Custom C++ integration of [voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp) (GGML/GGUF based).
-*   **AI Engine**: MediaPipe GenAI / Google ML Kit.
+- Kotlin
+- Jetpack Compose
+- Hilt
+- Room
+- LiteRT-LM (`com.google.ai.edge.litertlm`)
+- DataStore
+- WorkManager
 
-## Setup & Installation
+## Platform Requirements
 
-### Prerequisites
-*   Android Studio Ladybug or newer.
-*   Android Device with API 26+ (API 31+ recommended for AI features).
-*   ~4GB free storage on device (for models).
+- Android Studio Ladybug or newer
+- Android device on API 31+
+- enough free device storage for imported models
 
-### Building the App
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/Danmoreng/vox-transcribe.git
-    cd vox-transcribe
-    ```
-2.  Initialize submodules (for Voxtral engine):
-    ```bash
-    git submodule update --init --recursive
-    ```
-3.  Open in Android Studio and build.
+## Supported Models
 
-### Setting up the Voxtral Model
-The app requires a GGUF model file to function. This file is not bundled due to its size (~2.5GB).
+The app currently accepts only these exact LiteRT-LM artifacts:
 
-1.  **Download Model**: Download `voxtral-mini-4b-realtime-q4_0.gguf` from Hugging Face.
-2.  **Install App**: Run the app on your device.
-3.  **Import Model**:
-    *   Open the app.
-    *   Tap the **Settings (Gear)** icon on the Home screen.
-    *   Tap **"Import .gguf Model File"** and select the downloaded file.
-    *   Wait for the status to change to **"Found"**.
-4.  **Load Engine**:
-    *   Tap **"Load Engine"**.
-    *   Wait ~30 seconds for the model to load into RAM (Status: **"Ready"**).
-5.  **Record**: Go back to Home and tap "New Recording".
+- `gemma-4-E2B-it.litertlm`
+- `gemma-4-E4B-it.litertlm`
 
-## Acknowledgements
+Users download these files outside the app and then import them manually through the model settings screen.
 
-*   **Voxtral**: [andrijdavid/voxtral.cpp](https://github.com/andrijdavid/voxtral.cpp) (Forked for Tier 1 Android optimizations at [Danmoreng/voxtral.cpp](https://github.com/Danmoreng/voxtral.cpp), branch `android-tier1-kv-opencl`. Includes internal Android KV-cache optimizations. **Note:** Default to CPU or OpenCL on Android for stability; Vulkan may be unstable on some Adreno drivers.)
-*   **GGML**: [ggml-org/ggml](https://github.com/ggml-org/ggml)
-*   **Mistral AI**: Creators of the original Voxtral model.
+## Current Capabilities
+
+- manual import, selection, and deletion of supported Gemma models
+- on-device title generation
+- on-device summary generation
+- on-device meeting notes generation
+- live clip-based transcription for long-form recordings
+
+## Current Transcription Pipeline
+
+The current live transcription implementation is a bounded clip pipeline:
+
+- 15 second clips
+- 3 second overlap
+- 16 kHz mono microphone capture
+- WAV wrapping before LiteRT-LM audio input
+- CPU-only audio inference path for device compatibility
+- delayed overlap merge between adjacent clip results
+- bounded backlog with explicit clip dropping if inference falls behind
+
+This is already usable on device, but transcription quality and merge behavior are still being tuned.
+
+## Building
+
+Clone the repository and open it in Android Studio. There are no longer any required git submodules or native inference build steps for the Android app.
+
+For command-line Gradle use on Windows, the repo includes:
+
+```powershell
+.\scripts\gradlew-jbr.ps1 :app:compileDebugKotlin
+```
+
+## Model Import Flow
+
+1. Install the app on a device.
+2. Download one of the supported `.litertlm` model files externally.
+3. Open the app and go to the Gemma model screen from Home.
+4. Import the downloaded model file.
+5. Select the imported model.
+6. Use recording for transcription or open a note detail screen for AI processing.
+
+## Docs
+
+- `docs/GEMMA_GALLERY_MIGRATION_PLAN.md`: migration plan and rationale
+- `docs/GALLERY_STACK_RESEARCH.md`: findings from Google AI Edge Gallery investigation
+- `docs/GEMMA_INFERENCE_ARCHITECTURE.md`: current Gemma architecture and runtime design
+- `docs/MIGRATION_TASKLIST.md`: current implementation status and remaining work
 
 ## License
 

@@ -1,103 +1,122 @@
 # Migration Task List
 
-## Status
+## Current Status
 
-This task list reflects the first actionable breakdown after researching Google AI Edge Gallery.
+This task list now reflects the current branch state rather than the initial migration breakdown.
+
+Completed at this point:
+
+- Gemma manual import and model selection are working
+- Gemma text processing is working on device
+- Gemma live transcription is working on device
+- the old app-module Voxtral/JNI/CMake inference path has been removed
+
+Still in progress:
+
+- transcription quality hardening and UX polish
+- longer-session verification and device validation
 
 ## Phase 0: Research Closure
 
 - [x] Clone and inspect `google-ai-edge/gallery` locally
 - [x] Document Gallery stack findings
 - [x] Document target Gemma architecture for `vox-transcribe`
-- [x] Confirm the exact Gemma 4 artifacts and accepted file formats we will support for manual import
-  Decision: first pass accepts `.litertlm` files only, specifically `gemma-4-E2B-it.litertlm` and `gemma-4-E4B-it.litertlm`.
-- [x] Decide whether Hugging Face OAuth is required for those artifacts
-  Decision: the app will not support in-app authentication or authenticated downloads; model acquisition happens outside the app.
+- [x] Confirm the exact Gemma 4 artifacts and accepted file formats
+- [x] Decide against in-app authentication and authenticated downloads
+
+Decision:
+
+- the app accepts only `.litertlm` files for now
+- the current supported artifacts are `gemma-4-E2B-it.litertlm` and `gemma-4-E4B-it.litertlm`
+- model download happens outside the app
 
 ## Phase 1: Platform and Dependency Reset
 
-- [ ] Raise `minSdk` from `26` to `31`
-- [ ] Remove `externalNativeBuild` from [app/build.gradle.kts](/C:/Development/vox-transcribe/app/build.gradle.kts)
-- [ ] Remove native build arguments for OpenCL/Vulkan
-- [ ] Remove JNI/CMake-related files from the app module
-- [ ] Remove `external/voxtral` submodule wiring
-- [ ] Add the LiteRT-LM dependency set required for Gemma runtime integration
-- [ ] Add the dependencies needed for manual model import and persisted settings
+- [x] Raise `minSdk` from `26` to `31`
+- [x] Remove `externalNativeBuild` from [app/build.gradle.kts](/C:/Development/vox-transcribe/app/build.gradle.kts)
+- [x] Remove native build arguments for OpenCL/Vulkan
+- [x] Remove JNI/CMake-related files from the app module
+- [x] Remove obsolete root-level submodule wiring and directories
+- [x] Add LiteRT-LM dependency support
+- [x] Add dependencies for manual model import and persisted settings
 
 ## Phase 2: Delete Old Runtime Paths
 
-- [ ] Remove `VoxtralJni.kt`
-- [ ] Remove `VoxtralModelManager.kt`
-- [ ] Remove `VoxtralTranscriptionRepository.kt`
-- [ ] Remove `AndroidSpeechRecognizerImpl.kt`
-- [ ] Remove `DynamicTranscriptionRepository.kt`
-- [ ] Remove `EngineType` switching
-- [ ] Remove `VoxtralModelViewModel.kt`
-- [ ] Replace `VoxtralModelScreen.kt` with a Gemma-specific model screen
-- [ ] Remove obsolete Voxtral/OpenCL/Vulkan docs from the active product path
+- [x] Remove `VoxtralJni.kt`
+- [x] Remove `VoxtralModelManager.kt`
+- [x] Remove `VoxtralTranscriptionRepository.kt`
+- [x] Remove `AndroidSpeechRecognizerImpl.kt`
+- [x] Remove `DynamicTranscriptionRepository.kt`
+- [x] Remove engine switching
+- [x] Replace old model management UI with Gemma-specific UI
+- [x] Remove all remaining obsolete Voxtral/OpenCL/Vulkan repo artifacts
 
 ## Phase 3: Introduce Gemma Model Management
 
-- [ ] Create `GemmaModelCatalog`
-- [ ] Create `GemmaSettingsRepository`
-- [ ] Persist `selectedModelId`
-- [ ] Add persisted TOU/token state if needed
-- [ ] Create `GemmaImportRepository`
-- [ ] Store models in `externalFilesDir`
-- [ ] Add strict import validation for supported Gemma artifacts
-- [ ] Expose install/import state to UI
-- [ ] Build a new model management screen for `E2B` / `E4B`
+- [x] Create `GemmaModelCatalog`
+- [x] Create `GemmaSettingsRepository`
+- [x] Persist `selectedModelId`
+- [x] Create `GemmaImportRepository`
+- [x] Store models in app-managed external storage
+- [x] Add strict import validation for supported Gemma artifacts
+- [x] Expose import and install state to UI
+- [x] Build a Gemma model management screen for `E2B` and `E4B`
 
 ## Phase 4: Introduce Shared Runtime Ownership
 
-- [ ] Create `GemmaRuntimeManager`
-- [ ] Implement model initialization and cleanup
-- [ ] Implement busy/ready/error state reporting
-- [ ] Serialize runtime access so one inference job owns the model at a time
-- [ ] Add conversation/session reset behavior where needed
+- [x] Create `GemmaRuntimeManager`
+- [x] Implement model initialization and cleanup
+- [x] Serialize runtime access so one inference job owns the model at a time
+- [x] Support text and audio conversation setup
+- [ ] Improve explicit busy and runtime-state reporting in UI
 
 ## Phase 5: Restore Text Tasks on Gemma
 
-- [ ] Replace `MediaPipeAiRepository` with `GemmaAiRepository`
+- [x] Replace `MediaPipeAiRepository` with `GemmaAiRepository`
 - [ ] Centralize summary prompt templates
-- [ ] Centralize notes/action-items/title prompt templates
-- [ ] Rewire detail screen actions to the new repository
-- [ ] Verify text tasks work with both `E2B` and `E4B`
+- [ ] Centralize notes, title, and action-item prompt templates
+- [x] Rewire detail screen actions to the new repository
+- [x] Verify text tasks on device with imported Gemma models
 
 ## Phase 6: Build Clip-Based Long-Form Transcription
 
-- [ ] Create `GemmaTranscriptionRepository`
-- [ ] Reuse `AudioRecorder` as the microphone capture source
-- [ ] Add rolling clip scheduler
-- [ ] Add clip overlap support
-- [ ] Convert recorded PCM to the model input format expected by LiteRT-LM
-- [ ] Queue clips for sequential inference
-- [ ] Emit finalized transcript segments through `TranscriptionRepository`
-- [ ] Add clip-result deduplication/merge heuristics
-- [ ] Bound queue growth and define overflow behavior
+- [x] Create `GemmaTranscriptionRepository`
+- [x] Reuse `AudioRecorder` as the microphone capture source
+- [x] Add rolling clip scheduler
+- [x] Add clip overlap support
+- [x] Convert recorded PCM to WAV input for LiteRT-LM audio ingestion
+- [x] Queue clips for sequential inference
+- [x] Emit finalized transcript segments through `TranscriptionRepository`
+- [x] Add first-pass clip-result deduplication and merge heuristics
+- [x] Bound queue growth and define overflow behavior
+- [x] Force CPU-only audio path for current device compatibility
+- [ ] Improve duplicate suppression at clip boundaries
+- [ ] Strip remaining prompt echoes more aggressively
+- [ ] Consider voice-activity-aware or sentence-aware clip cutting
 
 ## Phase 7: Rewire Existing App Flow
 
-- [ ] Keep `TranscriptionService` as the recording-session owner
-- [ ] Rebind DI so `TranscriptionRepository` points to `GemmaTranscriptionRepository`
-- [ ] Rebind AI DI so `AiRepository` points to `GemmaAiRepository`
-- [ ] Update status surfaces and error messaging
-- [ ] Remove obsolete backend-selection UI
+- [x] Keep `TranscriptionService` as the recording-session owner
+- [x] Rebind DI so `TranscriptionRepository` points to `GemmaTranscriptionRepository`
+- [x] Rebind AI DI so `AiRepository` points to `GemmaAiRepository`
+- [x] Remove obsolete backend-selection UI
+- [ ] Improve user-visible recording and catch-up status messaging
 
 ## Phase 8: Verification
 
-- [ ] Build the app successfully without JNI/CMake inference code
-- [ ] Verify model import/install/delete flows
-- [ ] Verify selected model persists across app restarts
-- [ ] Verify summary generation on stored transcripts
+- [x] Build the app successfully without JNI/CMake inference code
+- [x] Verify model import, selection, and delete flows
+- [x] Verify selected model persists across app restarts
+- [x] Verify summary generation on stored transcripts
+- [x] Verify live transcription on device
 - [ ] Verify long-form recording over at least 5 minutes
 - [ ] Verify backlog behavior when inference falls behind real time
 - [ ] Verify behavior when app backgrounds during transcription
+- [ ] Compare `E2B` and `E4B` behavior on target devices
 
 ## Immediate Next Tasks
 
-These are the next concrete implementation tasks from here:
-
-1. Confirm the exact supported Gemma 4 artifacts and accepted import formats.
-2. Update Gradle and Android platform assumptions for `minSdk 31` and LiteRT-LM.
-3. Implement the new model catalog/settings/import layer before deleting Voxtral classes.
+1. Tighten transcription boundary cleanup and prompt-echo suppression.
+2. Improve recording-state and degraded-mode UX.
+3. Run a longer on-device verification pass for transcription stability.
+4. Compare `E2B` and `E4B` on target devices.
