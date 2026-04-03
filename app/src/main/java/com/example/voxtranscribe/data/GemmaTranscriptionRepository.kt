@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -62,6 +63,8 @@ class GemmaTranscriptionRepository @Inject constructor(
     private var currentClipBuffer = ByteArrayOutputStream()
     private var currentClipSamples = 0
     private var currentCarrySamples = 0
+    private var currentNonSilentSamples = 0
+    private var currentCarryNonSilentSamples = 0
     private var currentSilentSamples = 0
     private var recentTranscriptTail = ""
     private var pendingTranscript = ""
@@ -102,6 +105,8 @@ class GemmaTranscriptionRepository @Inject constructor(
         currentClipBuffer = ByteArrayOutputStream()
         currentClipSamples = 0
         currentCarrySamples = 0
+        currentNonSilentSamples = 0
+        currentCarryNonSilentSamples = 0
         currentSilentSamples = 0
         recentTranscriptTail = ""
         pendingTranscript = ""
@@ -144,12 +149,18 @@ class GemmaTranscriptionRepository @Inject constructor(
 
         stateMutex.withLock {
             val newAudioSamples = currentClipSamples - currentCarrySamples
-            if (newAudioSamples >= MIN_FINAL_NEW_AUDIO_SAMPLES) {
+            val newNonSilentSamples = (currentNonSilentSamples - currentCarryNonSilentSamples).coerceAtLeast(0)
+            if (
+                newAudioSamples >= MIN_FINAL_NEW_AUDIO_SAMPLES &&
+                newNonSilentSamples >= MIN_FINAL_NON_SILENT_SAMPLES
+            ) {
                 enqueueCurrentClipLocked(ClipCutReason.FinalFlush)
             } else {
                 currentClipBuffer.reset()
                 currentClipSamples = 0
                 currentCarrySamples = 0
+                currentNonSilentSamples = 0
+                currentCarryNonSilentSamples = 0
                 currentSilentSamples = 0
             }
         }
@@ -196,7 +207,7 @@ class GemmaTranscriptionRepository @Inject constructor(
                 val transcript = runtimeManager.transcribeAudioClip(
                     audioBytes = pcm16MonoToWav(clip.pcmBytes, SAMPLE_RATE),
                     previousTranscriptTail = null,
-                    requestedGenerationTokens = TRANSCRIPTION_GENERATION_TOKENS,
+                    requestedGenerationTokens = requestedGenerationTokensForClip(clip),
                 ).cleanTranscript("")
                 val processingMillis = nanosToMillis(System.nanoTime() - startedAtNanos)
                 recordProcessingMetrics(clipDurationSeconds, processingMillis)
@@ -268,6 +279,7 @@ class GemmaTranscriptionRepository @Inject constructor(
     private fun appendChunkLocked(floatChunk: FloatArray, pcmChunk: ByteArray) {
         currentClipBuffer.write(pcmChunk)
         currentClipSamples += floatChunk.size
+        currentNonSilentSamples += countNonSilentSamples(floatChunk)
         currentSilentSamples = updateSilentRunSamples(floatChunk, currentSilentSamples)
 
         val newAudioSamples = currentClipSamples - currentCarrySamples
@@ -316,8 +328,12 @@ class GemmaTranscriptionRepository @Inject constructor(
                 currentClipBuffer.write(overlapBytes)
             }
             currentCarrySamples = overlapBytes.size / BYTES_PER_SAMPLE
+            currentCarryNonSilentSamples = countNonSilentPcm16Samples(overlapBytes)
+            currentNonSilentSamples = currentCarryNonSilentSamples
         } else {
             currentCarrySamples = 0
+            currentCarryNonSilentSamples = 0
+            currentNonSilentSamples = 0
         }
         currentClipSamples = currentCarrySamples
         currentSilentSamples = 0
@@ -356,6 +372,39 @@ class GemmaTranscriptionRepository @Inject constructor(
             }
         }
         return silentRunSamples
+    }
+
+    private fun countNonSilentSamples(floatChunk: FloatArray): Int {
+        return floatChunk.count { abs(it) > SILENCE_AMPLITUDE_THRESHOLD }
+    }
+
+    private fun countNonSilentPcm16Samples(pcmBytes: ByteArray): Int {
+        if (pcmBytes.isEmpty()) {
+            return 0
+        }
+
+        val sampleCount = pcmBytes.size / BYTES_PER_SAMPLE
+        var nonSilent = 0
+        val threshold = (SILENCE_AMPLITUDE_THRESHOLD * Short.MAX_VALUE).toInt()
+        var index = 0
+        while (index + 1 < pcmBytes.size) {
+            val sample = ((pcmBytes[index + 1].toInt() shl 8) or (pcmBytes[index].toInt() and 0xff)).toShort().toInt()
+            if (abs(sample) > threshold) {
+                nonSilent += 1
+            }
+            index += BYTES_PER_SAMPLE
+        }
+        return nonSilent.coerceAtMost(sampleCount)
+    }
+
+    private fun requestedGenerationTokensForClip(clip: ClipRequest): Int {
+        val tokensByDuration = (clip.newAudioSeconds * TOKENS_PER_AUDIO_SECOND).roundToInt()
+        val bounded = tokensByDuration.coerceIn(MIN_AUDIO_GENERATION_TOKENS, MAX_AUDIO_GENERATION_TOKENS)
+        return when (clip.cutReason) {
+            ClipCutReason.FinalFlush -> bounded.coerceAtMost(FINAL_FLUSH_MAX_GENERATION_TOKENS)
+            ClipCutReason.Silence -> bounded.coerceAtMost(SILENCE_CUT_MAX_GENERATION_TOKENS)
+            ClipCutReason.MaxDuration -> bounded
+        }
     }
 
     private fun recordProcessingMetrics(
@@ -471,6 +520,7 @@ class GemmaTranscriptionRepository @Inject constructor(
             .filterNot { it.startsWith("Return only the new transcript", ignoreCase = true) }
             .filterNot { it.startsWith("Return only the transcript", ignoreCase = true) }
             .filterNot { it.startsWith("Transcribe only the spoken audio", ignoreCase = true) }
+            .filterNot { TIMESTAMP_RANGE_LINE_REGEX.matches(it) }
             .joinToString(separator = "\n")
             .replace(AUDIO_PROMPT_NO_CONTEXT, "", ignoreCase = true)
             .replace("Return only the transcript for this audio clip.", "", ignoreCase = true)
@@ -741,7 +791,13 @@ class GemmaTranscriptionRepository @Inject constructor(
         const val FORCED_OVERLAP_SAMPLES = SAMPLE_RATE * FORCED_OVERLAP_SECONDS
         const val MIN_FINAL_NEW_AUDIO_SAMPLES = SAMPLE_RATE
         const val CLIP_CHANNEL_CAPACITY = 4
-        const val TRANSCRIPTION_GENERATION_TOKENS = 256
+        const val MIN_FINAL_NON_SILENT_MILLIS = 250
+        const val MIN_FINAL_NON_SILENT_SAMPLES = SAMPLE_RATE * MIN_FINAL_NON_SILENT_MILLIS / 1000
+        const val MIN_AUDIO_GENERATION_TOKENS = 24
+        const val MAX_AUDIO_GENERATION_TOKENS = 128
+        const val FINAL_FLUSH_MAX_GENERATION_TOKENS = 48
+        const val SILENCE_CUT_MAX_GENERATION_TOKENS = 72
+        const val TOKENS_PER_AUDIO_SECOND = 5.0
         const val WAV_HEADER_SIZE = 44
         const val MAX_OVERLAP_WORDS = 24
         const val STRONG_TOKEN_MATCH_SCORE = 0.75
@@ -753,6 +809,7 @@ class GemmaTranscriptionRepository @Inject constructor(
         const val SILENCE_HOLD_SAMPLES = SAMPLE_RATE * SILENCE_HOLD_MILLIS / 1000
         const val SILENCE_AMPLITUDE_THRESHOLD = 0.015f
         const val AUDIO_PROMPT_NO_CONTEXT = "Return only the transcript for this audio clip."
+        val TIMESTAMP_RANGE_LINE_REGEX = Regex("""^\[\s*\d+m\d+s\d+ms\s*-\s*\d+m\d+s\d+ms\s*\]$""")
         val WORD_SPLIT_REGEX = Regex("\\s+")
     }
 }

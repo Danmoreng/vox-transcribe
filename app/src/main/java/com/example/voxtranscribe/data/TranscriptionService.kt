@@ -12,9 +12,11 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.voxtranscribe.MainActivity
+import com.example.voxtranscribe.data.ai.AiRepository
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -28,7 +30,13 @@ class TranscriptionService : LifecycleService() {
     @Inject
     lateinit var notesRepository: NotesRepository
 
+    @Inject
+    lateinit var aiRepository: AiRepository
+
     private val TAG = "TranscriptionService"
+    private var activeNoteId: Long? = null
+    private var segmentCollectorJob: Job? = null
+    private val finalizedTranscriptParts = mutableListOf<String>()
 
     companion object {
         private const val CHANNEL_ID = "transcription_channel"
@@ -64,16 +72,20 @@ class TranscriptionService : LifecycleService() {
     }
 
     private fun startForegroundService(noteId: Long) {
+        activeNoteId = noteId
+        finalizedTranscriptParts.clear()
         val notification = createNotification("Vox Transcribe is listening...")
         startForeground(NOTIFICATION_ID, notification)
         
         lifecycleScope.launch {
             Log.d(TAG, "Launching collector for noteId: $noteId")
             // Collect and save to DB
-            launch {
+            segmentCollectorJob?.cancel()
+            segmentCollectorJob = launch {
                 repository.transcriptionState.collect { entry ->
                     Log.d(TAG, "Received entry: ${entry.text}, isFinal: ${entry.isFinal}")
                     if (entry.isFinal) {
+                        finalizedTranscriptParts += entry.text
                         try {
                             // Prevent cancellation during save
                             withContext(NonCancellable) {
@@ -95,10 +107,43 @@ class TranscriptionService : LifecycleService() {
     private fun stopForegroundService() {
         lifecycleScope.launch {
             Log.d(TAG, "Calling stopListening...")
+            updateNotification("Finalizing note...")
             repository.stopListening()
+            generateTitleForActiveNote()
+            segmentCollectorJob?.cancel()
+            segmentCollectorJob = null
             Log.d(TAG, "stopListening returned. Stopping service.")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+        }
+    }
+
+    private suspend fun generateTitleForActiveNote() {
+        val noteId = activeNoteId ?: return
+        val transcript = finalizedTranscriptParts
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString(separator = "\n")
+            .trim()
+        if (transcript.isBlank()) {
+            activeNoteId = null
+            finalizedTranscriptParts.clear()
+            return
+        }
+
+        try {
+            Log.d(TAG, "Generating automatic title for noteId: $noteId")
+            updateNotification("Title generation...")
+            val title = aiRepository.generateTitle(transcript)
+            withContext(NonCancellable) {
+                notesRepository.updateNoteTitle(noteId, title)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Automatic title generation failed for noteId: $noteId", e)
+        } finally {
+            activeNoteId = null
+            finalizedTranscriptParts.clear()
         }
     }
 
@@ -116,6 +161,11 @@ class TranscriptionService : LifecycleService() {
             .setOngoing(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
+
+    private fun updateNotification(content: String) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, createNotification(content))
     }
 
     private fun createNotificationChannel() {
