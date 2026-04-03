@@ -58,6 +58,7 @@ class GemmaRuntimeManager @Inject constructor(
 
     suspend fun transcribeAudioClip(
         audioBytes: ByteArray,
+        previousTranscriptTail: String?,
         requestedGenerationTokens: Int = DEFAULT_AUDIO_GENERATION_TOKENS,
     ): String {
         return mutex.withLock {
@@ -74,13 +75,16 @@ class GemmaRuntimeManager @Inject constructor(
                 enableAudio = true,
             )
 
-            val conversation = createConversation()
+            val conversation = createConversation(
+                audioMode = true,
+                systemInstruction = DEFAULT_AUDIO_SYSTEM_INSTRUCTION,
+            )
             try {
                 runConversation(
                     conversation = conversation,
                     contents = listOf(
                         Content.AudioBytes(audioBytes),
-                        Content.Text(DEFAULT_AUDIO_TRANSCRIPTION_PROMPT),
+                        Content.Text(buildAudioUserPrompt(previousTranscriptTail)),
                     ),
                 )
             } finally {
@@ -148,15 +152,30 @@ class GemmaRuntimeManager @Inject constructor(
         )
     }
 
-    private fun createConversation(): Conversation {
+    private fun createConversation(
+        audioMode: Boolean = false,
+        systemInstruction: String? = null,
+    ): Conversation {
         val currentEngine = engine ?: throw IllegalStateException("Gemma engine is not initialized.")
+        val samplerConfig = if (audioMode) {
+            SamplerConfig(
+                topK = 1,
+                topP = 1.0,
+                temperature = 0.0,
+            )
+        } else {
+            SamplerConfig(
+                topK = 64,
+                topP = 0.95,
+                temperature = 0.7,
+            )
+        }
         return currentEngine.createConversation(
             ConversationConfig(
-                samplerConfig = SamplerConfig(
-                    topK = 64,
-                    topP = 0.95,
-                    temperature = 0.7,
-                )
+                samplerConfig = samplerConfig,
+                systemInstruction = systemInstruction
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { Contents.of(Content.Text(it)) },
             )
         )
     }
@@ -206,12 +225,27 @@ class GemmaRuntimeManager @Inject constructor(
         return max(MIN_CONTEXT_TOKENS, requestedGenerationTokens + CONTEXT_HEADROOM_TOKENS)
     }
 
+    private fun buildAudioUserPrompt(previousTranscriptTail: String?): String {
+        val tail = previousTranscriptTail?.trim().orEmpty()
+        return if (tail.isBlank()) {
+            AUDIO_USER_PROMPT_NO_CONTEXT
+        } else {
+            AUDIO_USER_PROMPT_WITH_CONTEXT_TEMPLATE.format(tail)
+        }
+    }
+
     companion object {
         private const val DEFAULT_GENERATION_TOKENS = 1024
         private const val DEFAULT_AUDIO_GENERATION_TOKENS = 256
         private const val MIN_CONTEXT_TOKENS = 2048
         private const val CONTEXT_HEADROOM_TOKENS = 512
-        private const val DEFAULT_AUDIO_TRANSCRIPTION_PROMPT =
-            "Transcribe the spoken audio exactly. Preserve the original language. Return only the transcript text."
+        private const val DEFAULT_AUDIO_SYSTEM_INSTRUCTION =
+            "Transcribe only the spoken audio. Preserve the original language. " +
+                "Return only the spoken words. Do not translate. Do not explain. " +
+                "Do not repeat instructions or prior context."
+        private const val AUDIO_USER_PROMPT_NO_CONTEXT =
+            "Return only the transcript for this audio clip."
+        private const val AUDIO_USER_PROMPT_WITH_CONTEXT_TEMPLATE =
+            "Continue after this confirmed context and do not repeat it:%n%s%nReturn only the new transcript for this audio clip."
     }
 }
