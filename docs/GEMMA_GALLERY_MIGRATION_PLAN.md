@@ -13,7 +13,7 @@ The new direction is:
   - clip-based audio transcription
   - summarization
   - additional text processing tasks
-- add in-app model download and management inspired by Google AI Edge Gallery
+- add in-app model import and management inspired by Google AI Edge Gallery, but without any in-app authentication or downloader
 
 This is a hard-cut migration branch, not an incremental dual-stack rollout.
 
@@ -22,7 +22,8 @@ This is a hard-cut migration branch, not an incremental dual-stack rollout.
 - Product goal remains a long-form offline meeting assistant.
 - Android support baseline can be raised to align with the new inference stack.
 - `voxtral` is removed completely rather than retained as a fallback.
-- Model download should happen in-app, similar to Google AI Edge Gallery.
+- The app must not require any authentication, whether hardcoded or user-provided.
+- Model acquisition should happen outside the app, followed by manual import into the app.
 - A single selected Gemma model should serve both audio and text workflows.
 - Existing Android UI direction should be preserved.
 - Long-form transcription should be achieved by repeatedly processing bounded audio clips, similar in product behavior to the earlier Android speech-recognition flow.
@@ -39,7 +40,7 @@ That split increases maintenance cost, testing surface, app complexity, and mode
 Expected benefits:
 
 - one model family instead of multiple heterogeneous stacks
-- one model-selection UI and download flow
+- one model-selection UI and import flow
 - removal of native C++ build and Android NDK maintenance burden
 - tighter integration between transcription and post-processing
 - easier experimentation with future Google AI Edge model releases
@@ -49,7 +50,7 @@ Expected tradeoffs:
 - transcription is no longer true continuous streaming inference
 - transcription quality and latency depend on clip scheduling, prompt design, and merge logic
 - minimum Android version and device capability requirements will increase
-- model packaging, download, and lifecycle management become central product concerns
+- model packaging, import validation, and lifecycle management become central product concerns
 
 ## Current Reusable App Assets
 
@@ -78,7 +79,7 @@ The target direction should be informed by Google AI Edge Gallery rather than co
 Relevant Gallery characteristics to study and reuse conceptually:
 
 - LiteRT-based on-device inference stack
-- in-app model browsing, downloading, and local management
+- in-app model browsing, import, and local management
 - support for Gemma 4 family models
 - unified model execution environment for multiple task types
 - Android baseline more aligned with modern on-device GenAI support
@@ -87,7 +88,7 @@ We should study:
 
 - dependency set and runtime stack
 - model file format and runtime packaging expectations
-- download/auth flow and whether the app can support a simplified version
+- import flow and exact validation rules for supported model artifacts
 - session lifecycle and memory management for loaded models
 - how audio scribe mode is modeled in the app and how task routing is represented
 
@@ -153,8 +154,8 @@ This requires:
 Add an in-app model management flow modeled after Gallery but adapted to this product:
 
 - discover or present supported models
-- show installed/downloaded/currently selected model
-- start, pause, resume, retry, and remove downloads where supported
+- show installed/imported/currently selected model
+- allow manual import, replace, reimport, and delete
 - validate model compatibility before selection
 - surface storage and device requirement warnings
 
@@ -173,7 +174,7 @@ Tasks:
 - inspect Gallery Android modules, dependencies, and runtime layers
 - identify the minimum dependency subset needed for this app
 - verify how Gemma 4 `E2B` and `E4B` are packaged and selected
-- verify expected model file sources and download mechanism requirements
+- verify expected model file sources and accepted import formats
 - verify how audio input must be prepared for Gemma transcription
 - verify runtime constraints:
   - min SDK
@@ -187,7 +188,7 @@ Deliverables:
 - architecture notes in docs
 - dependency list
 - runtime constraints table
-- chosen integration strategy for downloads and inference sessions
+- chosen integration strategy for manual import and inference sessions
 
 Exit criteria:
 
@@ -230,7 +231,7 @@ Tasks:
 - add required LiteRT / Google AI Edge dependencies
 - remove obsolete MediaPipe / ML Kit dependencies that are no longer part of the target stack
 - update repository and plugin versions as needed
-- add any required app configuration for model download/auth flows
+- add only the app configuration required for manual import and persisted selection state
 
 Deliverables:
 
@@ -245,20 +246,20 @@ Exit criteria:
 
 Goal:
 
-- support installation and selection of Gemma models inside the app
+- support import, installation state, and selection of Gemma models inside the app
 
 Tasks:
 
 - define app-level model metadata for `E2B` and `E4B`
 - implement model state persistence
-- implement download workflow
+- implement manual import workflow
 - implement integrity and compatibility checks
 - implement model selection UX
 - expose model readiness state to the rest of the app
 
 Deliverables:
 
-- users can download and select a supported model in-app
+- users can import and select a supported model in-app
 
 Exit criteria:
 
@@ -348,7 +349,7 @@ Goal:
 
 Tasks:
 
-- validate model download and resume behavior
+- validate model import, replacement, and deletion behavior
 - test model switching between `E2B` and `E4B`
 - test long recording sessions across supported devices
 - evaluate transcription latency, backlog growth, and battery impact
@@ -384,7 +385,7 @@ Exit criteria:
 
 - retain Room schema unless transcript segmentation needs refinement
 - add model metadata persistence
-- add download job persistence if required
+- add model import metadata and selection persistence
 
 ### UI
 
@@ -403,7 +404,7 @@ Exit criteria:
 
 - replace setup instructions
 - add supported-device guidance
-- add model download and storage guidance
+- add model acquisition, import, and storage guidance
 - remove outdated Voxtral/Vulkan/OpenCL docs from the active product path
 
 ## Major Risks and Mitigations
@@ -431,12 +432,12 @@ Mitigation:
 - apply lightweight deduplication and stitch heuristics
 - test with realistic conversational audio instead of synthetic samples only
 
-### Risk 4: Model download UX becomes too complex
+### Risk 4: Model acquisition and import UX becomes too complex
 
 Mitigation:
 
-- start with a constrained allowlist of two supported models
-- defer broader marketplace-style discovery
+- start with two explicitly supported model variants only
+- provide exact external download guidance and strict import validation
 
 ### Risk 5: Device support becomes too narrow
 
@@ -463,14 +464,14 @@ Mitigation:
 
 ### Integration-level
 
-- model download lifecycle
+- model import lifecycle
 - model selection persistence
 - transcription repository to service to DB pipeline
 - summary generation from saved transcript text
 
 ### Device-level
 
-- first model download
+- first model import
 - first load latency
 - transcription over 5, 15, and 30 minute sessions
 - stop/resume behavior
@@ -483,7 +484,7 @@ This migration branch is considered successful when all of the following are tru
 
 - the project contains no Voxtral runtime dependency
 - the app builds without native JNI/CMake inference code
-- the app can download and select Gemma `E2B` or `E4B` in-app
+- the app can import and select Gemma `E2B` or `E4B` in-app
 - the selected model is used for both transcription and text tasks
 - long-form meeting recording works through repeated bounded audio inference
 - transcript segments are persisted to Room through the existing service-based workflow
