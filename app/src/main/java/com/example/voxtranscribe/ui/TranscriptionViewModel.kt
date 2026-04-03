@@ -22,7 +22,12 @@ import javax.inject.Inject
 data class TranscriptionStats(
     val isOffline: Boolean = false,
     val durationSeconds: Long = 0,
-    val wordCount: Int = 0
+    val wordCount: Int = 0,
+    val debugStatus: String = "Idle",
+    val realtimeFactorText: String = "n/a",
+    val speedText: String = "n/a",
+    val queuedClips: Int = 0,
+    val droppedClips: Int = 0,
 )
 
 @HiltViewModel
@@ -79,10 +84,26 @@ class TranscriptionViewModel @Inject constructor(
     val stats: StateFlow<TranscriptionStats> = combine(
         speechRepository.isOfflineModel,
         _durationSeconds,
-        transcriptionState
-    ) { isOffline, duration, text ->
+        transcriptionState,
+        speechRepository.debugState,
+    ) { isOffline, duration, text, debug ->
         val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
-        TranscriptionStats(isOffline, duration, words)
+        val realtimeFactorText = debug.averageRealtimeFactor
+            ?.let { String.format(Locale.US, "%.2f", it) }
+            ?: "n/a"
+        val speedText = debug.averageSpeedMultiplier
+            ?.let { String.format(Locale.US, "%.2fx", it) }
+            ?: "n/a"
+        TranscriptionStats(
+            isOffline = isOffline,
+            durationSeconds = duration,
+            wordCount = words,
+            debugStatus = debug.status,
+            realtimeFactorText = realtimeFactorText,
+            speedText = speedText,
+            queuedClips = debug.queuedClips,
+            droppedClips = debug.droppedClips,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TranscriptionStats())
 
     fun startRecording() {

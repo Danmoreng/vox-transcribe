@@ -17,6 +17,8 @@ interface TranscriptionRepository {
     val isOfflineModel: StateFlow<Boolean>
     
     val engineState: StateFlow<com.example.voxtranscribe.data.EngineState>
+
+    val debugState: StateFlow<com.example.voxtranscribe.data.TranscriptionDebugState>
     
     fun startListening()
     suspend fun stopListening()

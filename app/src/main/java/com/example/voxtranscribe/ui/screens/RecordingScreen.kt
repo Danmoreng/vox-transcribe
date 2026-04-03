@@ -156,6 +156,34 @@ fun RecordingScreen(
                         label = "Words",
                         value = "${stats.wordCount}"
                     )
+                    StatItem(
+                        label = "Speed",
+                        value = stats.speedText,
+                        color = if (stats.speedText == "n/a") Color.Gray else MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Surface(
+                tonalElevation = 1.dp,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatItem(label = "Status", value = stats.debugStatus)
+                    StatItem(label = "RTF", value = stats.realtimeFactorText)
+                    StatItem(label = "Queue", value = "${stats.queuedClips}")
+                    StatItem(
+                        label = "Dropped",
+                        value = "${stats.droppedClips}",
+                        color = if (stats.droppedClips > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
 

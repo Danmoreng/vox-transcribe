@@ -52,6 +52,9 @@ class GemmaTranscriptionRepository @Inject constructor(
     private val _engineState = MutableStateFlow(initialEngineState())
     override val engineState: StateFlow<EngineState> = _engineState.asStateFlow()
 
+    private val _debugState = MutableStateFlow(TranscriptionDebugState())
+    override val debugState: StateFlow<TranscriptionDebugState> = _debugState.asStateFlow()
+
     private var clipChannel: Channel<ByteArray>? = null
     private var captureJob: kotlinx.coroutines.Job? = null
     private var processingJob: kotlinx.coroutines.Job? = null
@@ -61,6 +64,9 @@ class GemmaTranscriptionRepository @Inject constructor(
     private var recentTranscriptTail = ""
     private var pendingTranscript = ""
     private var droppedClipCount = 0
+    private var queuedClipCount = 0
+    private var totalProcessedAudioSeconds = 0.0
+    private var totalProcessingMillis = 0L
 
     init {
         scope.launch {
@@ -97,6 +103,10 @@ class GemmaTranscriptionRepository @Inject constructor(
         recentTranscriptTail = ""
         pendingTranscript = ""
         droppedClipCount = 0
+        queuedClipCount = 0
+        totalProcessedAudioSeconds = 0.0
+        totalProcessingMillis = 0L
+        _debugState.value = TranscriptionDebugState(status = "Recording")
         clipChannel = Channel(capacity = CLIP_CHANNEL_CAPACITY)
 
         processingJob = scope.launch {
@@ -153,6 +163,7 @@ class GemmaTranscriptionRepository @Inject constructor(
             _engineState.value = if (isModelReady()) EngineState.Ready else EngineState.Uninitialized
         }
         _partialText.value = ""
+        updateDebugState(status = "Idle", queuedClips = 0)
     }
 
     override fun clear() {
@@ -174,20 +185,38 @@ class GemmaTranscriptionRepository @Inject constructor(
         val channel = clipChannel ?: return
         for (clipBytes in channel) {
             try {
+                val clipDurationSeconds = clipDurationSeconds(clipBytes)
+                queuedClipCount = (queuedClipCount - 1).coerceAtLeast(0)
+                updateDebugState(
+                    status = if (queuedClipCount > 0) "Catching up" else "Processing",
+                    queuedClips = queuedClipCount,
+                    lastClipSeconds = clipDurationSeconds,
+                )
+                val startedAtNanos = System.nanoTime()
                 val transcript = runtimeManager.transcribeAudioClip(
                     audioBytes = pcm16MonoToWav(clipBytes, SAMPLE_RATE),
                     previousTranscriptTail = null,
                     requestedGenerationTokens = TRANSCRIPTION_GENERATION_TOKENS,
                 ).cleanTranscript("")
+                val processingMillis = nanosToMillis(System.nanoTime() - startedAtNanos)
+                recordProcessingMetrics(clipDurationSeconds, processingMillis)
 
                 val currentTranscript = trimTrailingEchoAgainstRecentTail(transcript)
                 if (currentTranscript.isBlank()) {
+                    updateDebugState(
+                        status = if (queuedClipCount > 0) "Catching up" else "Recording",
+                        queuedClips = queuedClipCount,
+                    )
                     continue
                 }
 
                 if (pendingTranscript.isBlank()) {
                     pendingTranscript = currentTranscript
                     _partialText.value = pendingTranscript
+                    updateDebugState(
+                        status = if (queuedClipCount > 0) "Catching up" else "Recording",
+                        queuedClips = queuedClipCount,
+                    )
                     continue
                 }
 
@@ -203,10 +232,15 @@ class GemmaTranscriptionRepository @Inject constructor(
                 pendingTranscript = currentTranscript
                 _partialText.value = pendingTranscript
                 _engineState.value = EngineState.Ready
+                updateDebugState(
+                    status = if (queuedClipCount > 0) "Catching up" else "Recording",
+                    queuedClips = queuedClipCount,
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Gemma clip transcription failed", e)
                 _engineState.value = EngineState.Error
                 _partialText.value = e.message ?: "Gemma transcription failed."
+                updateDebugState(status = "Error", queuedClips = queuedClipCount)
             }
         }
 
@@ -225,8 +259,15 @@ class GemmaTranscriptionRepository @Inject constructor(
                 droppedClipCount += 1
                 Log.w(TAG, "Dropping clip due to backlog. droppedClipCount=$droppedClipCount")
                 _partialText.value = "Transcription is behind. Skipping audio to catch up."
+                updateDebugState(status = "Catching up", droppedClips = droppedClipCount)
             } else {
                 droppedClipCount = 0
+                queuedClipCount += 1
+                updateDebugState(
+                    status = if (queuedClipCount > 1) "Catching up" else "Recording",
+                    queuedClips = queuedClipCount,
+                    droppedClips = droppedClipCount,
+                )
             }
         }
 
@@ -258,8 +299,56 @@ class GemmaTranscriptionRepository @Inject constructor(
         return byteBuffer.array()
     }
 
-    private fun clipDurationSeconds(clipBytes: ByteArray): Int {
-        return (clipBytes.size / BYTES_PER_SAMPLE) / SAMPLE_RATE
+    private fun clipDurationSeconds(clipBytes: ByteArray): Double {
+        return clipBytes.size.toDouble() / BYTES_PER_SAMPLE.toDouble() / SAMPLE_RATE.toDouble()
+    }
+
+    private fun recordProcessingMetrics(
+        clipDurationSeconds: Double,
+        processingMillis: Long,
+    ) {
+        totalProcessedAudioSeconds += clipDurationSeconds
+        totalProcessingMillis += processingMillis
+        val averageRealtimeFactor = if (totalProcessedAudioSeconds > 0.0) {
+            totalProcessingMillis / 1000.0 / totalProcessedAudioSeconds
+        } else {
+            null
+        }
+        val averageSpeedMultiplier = averageRealtimeFactor
+            ?.takeIf { it > 0.0 }
+            ?.let { 1.0 / it }
+
+        updateDebugState(
+            queuedClips = queuedClipCount,
+            lastClipSeconds = clipDurationSeconds,
+            lastProcessingMillis = processingMillis,
+            averageRealtimeFactor = averageRealtimeFactor,
+            averageSpeedMultiplier = averageSpeedMultiplier,
+        )
+    }
+
+    private fun updateDebugState(
+        status: String? = null,
+        queuedClips: Int? = null,
+        droppedClips: Int? = null,
+        lastClipSeconds: Double? = null,
+        lastProcessingMillis: Long? = null,
+        averageRealtimeFactor: Double? = null,
+        averageSpeedMultiplier: Double? = null,
+    ) {
+        _debugState.value = _debugState.value.copy(
+            status = status ?: _debugState.value.status,
+            queuedClips = queuedClips ?: _debugState.value.queuedClips,
+            droppedClips = droppedClips ?: _debugState.value.droppedClips,
+            lastClipSeconds = lastClipSeconds ?: _debugState.value.lastClipSeconds,
+            lastProcessingMillis = lastProcessingMillis ?: _debugState.value.lastProcessingMillis,
+            averageRealtimeFactor = averageRealtimeFactor ?: _debugState.value.averageRealtimeFactor,
+            averageSpeedMultiplier = averageSpeedMultiplier ?: _debugState.value.averageSpeedMultiplier,
+        )
+    }
+
+    private fun nanosToMillis(nanos: Long): Long {
+        return nanos / 1_000_000L
     }
 
     private fun pcm16MonoToWav(pcmBytes: ByteArray, sampleRate: Int): ByteArray {
