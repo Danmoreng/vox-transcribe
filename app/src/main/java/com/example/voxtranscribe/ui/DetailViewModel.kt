@@ -4,10 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.ai.AiRepository
-import com.example.voxtranscribe.data.ai.ModelDownloadManager
+import com.example.voxtranscribe.data.gemma.GemmaImportRepository
+import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.db.NoteWithSegments
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -15,7 +21,8 @@ import javax.inject.Inject
 class DetailViewModel @Inject constructor(
     private val notesRepository: NotesRepository,
     private val aiRepository: AiRepository,
-    private val modelDownloadManager: ModelDownloadManager
+    private val gemmaSettingsRepository: GemmaSettingsRepository,
+    private val gemmaImportRepository: GemmaImportRepository,
 ) : ViewModel() {
 
     private val _isProcessing = MutableStateFlow(false)
@@ -24,11 +31,16 @@ class DetailViewModel @Inject constructor(
     private val _isDeleted = MutableStateFlow(false)
     val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
 
-    val downloadState = modelDownloadManager.downloadState
-
-    fun downloadModel() {
-        modelDownloadManager.downloadModel()
-    }
+    val isAiModelReady: StateFlow<Boolean> = combine(
+        gemmaImportRepository.modelStatuses,
+        gemmaSettingsRepository.selectedModelId,
+    ) { statuses, selectedModelId ->
+        statuses.any { it.spec.id == selectedModelId && it.isImported }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false,
+    )
 
     fun getNoteDetail(noteId: Long): StateFlow<NoteWithSegments?> {
         return notesRepository.getNoteWithSegments(noteId)

@@ -47,7 +47,8 @@ fun VoxNavGraph(navController: NavHostController) {
             val noteId = backStackEntry.arguments?.getLong("noteId") ?: return@composable
             DetailScreen(
                 noteId = noteId,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToModelSettings = { navController.navigate(Screen.GemmaModel.route) }
             )
         }
         composable(Screen.GemmaModel.route) {

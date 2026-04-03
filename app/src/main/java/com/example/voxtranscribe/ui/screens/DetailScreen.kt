@@ -30,19 +30,19 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Segment
-import com.example.voxtranscribe.data.ai.DownloadState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailScreen(
     noteId: Long,
     onNavigateBack: () -> Unit,
+    onNavigateToModelSettings: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val noteDetail by viewModel.getNoteDetail(noteId).collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
-    val downloadState by viewModel.downloadState.collectAsStateWithLifecycle()
+    val isAiModelReady by viewModel.isAiModelReady.collectAsStateWithLifecycle()
     
     val context = LocalContext.current
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
@@ -118,36 +118,17 @@ fun DetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    // Logic for AI Button: Download vs Process
-                    if (downloadState != DownloadState.Completed) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Button(
-                                onClick = { viewModel.downloadModel() },
-                                enabled = downloadState != DownloadState.Downloading,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (downloadState is DownloadState.Error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondary
-                                )
-                            ) {
-                                if (downloadState == DownloadState.Downloading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSecondary)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Downloading...", style = MaterialTheme.typography.labelLarge)
-                                } else {
-                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(if (downloadState is DownloadState.Error) "Retry Download" else "Download AI Model", style = MaterialTheme.typography.labelLarge)
-                                }
-                            }
-                            
-                            if (downloadState is DownloadState.Error) {
-                                Text(
-                                    text = (downloadState as DownloadState.Error).message,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
+                    if (!isAiModelReady) {
+                        Button(
+                            onClick = onNavigateToModelSettings,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Import AI Model", style = MaterialTheme.typography.labelLarge)
                         }
                     } else {
                         Button(
