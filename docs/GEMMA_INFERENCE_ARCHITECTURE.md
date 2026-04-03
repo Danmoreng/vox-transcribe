@@ -119,6 +119,8 @@ Current notes:
 
 - text tasks are already working on device
 - text inference uses the shared runtime manager
+- note titles are generated automatically after recording stops through `TranscriptionService`
+- summaries and meeting notes are still started manually from the detail screen
 - the current implementation still needs prompt-template centralization
 
 ### `GemmaTranscriptionRepository`
@@ -164,6 +166,8 @@ These existing pieces remain structurally intact:
 - note list and detail screens
 
 The migration changed implementations behind these seams rather than rewriting the product.
+
+`TranscriptionService` now also performs a post-stop title-generation pass for the active note after the final transcript segments are persisted.
 
 ## Long-Form Transcription Design
 
@@ -217,9 +221,9 @@ Text tasks are implemented as single-turn requests against the selected model.
 
 Current prompt-owned operations:
 
-- executive summary
-- meeting notes
-- title generation
+- automatic note title generation after recording stops
+- manual executive summary generation
+- manual meeting notes generation
 
 Prompt centralization is still a remaining cleanup task.
 

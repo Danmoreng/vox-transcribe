@@ -78,6 +78,7 @@ Decision:
 - [ ] Centralize summary prompt templates
 - [ ] Centralize notes, title, and action-item prompt templates
 - [x] Rewire detail screen actions to the new repository
+- [x] Generate note titles automatically after recording stops
 - [x] Verify text tasks on device with imported Gemma models
 
 ## Phase 6: Build Clip-Based Long-Form Transcription

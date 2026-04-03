@@ -9,7 +9,7 @@ The app is built around Gemma 4 running through LiteRT-LM and is designed for a 
 - records long-form audio sessions with a foreground recording service
 - transcribes speech on-device using imported Gemma 4 LiteRT-LM models
 - stores transcripts and notes locally with Room
-- generates on-device titles, summaries, and meeting notes from saved transcripts
+- generates on-device note titles automatically after recording and can generate summaries and meeting notes from saved transcripts
 - renders AI-generated summaries and meeting notes as markdown in the detail view
 - supports manual model import and selection inside the app
 
@@ -20,6 +20,7 @@ The app is built around Gemma 4 running through LiteRT-LM and is designed for a 
 - no cloud fallback
 - one selected Gemma model used for both transcription and text tasks
 - live transcription optimized for long-form recordings through clip scheduling and transcript stitching
+- note titles are generated automatically after recording stops; summaries and meeting notes remain manual
 
 ## Supported Models
 
@@ -91,8 +92,9 @@ For command-line Gradle use on Windows:
 3. Open the app and go to the Gemma model screen.
 4. Import the model file and select it.
 5. Choose a transcription language if you know the spoken language, or leave it on `Auto`.
-6. Start a recording or open a saved note to run AI processing.
-7. View generated summaries and meeting notes with markdown formatting preserved in the note detail screen.
+6. Start a recording and wait for the app to finalize the transcript and generate a note title automatically.
+7. Open a saved note to run summary and meeting-note generation manually.
+8. View generated summaries and meeting notes with markdown formatting preserved in the note detail screen.
 
 ## Documentation
 
