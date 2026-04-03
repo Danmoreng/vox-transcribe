@@ -244,6 +244,7 @@ Current screen responsibilities:
 - select active model
 - select transcription language guidance
 - delete imported model files
+- render AI-generated summaries and meeting notes as markdown in the note detail screen
 
 The following old controls are intentionally gone:
 
@@ -258,6 +259,7 @@ Current platform assumptions:
 - `minSdk 31`
 - no app-module JNI/CMake/native inference code
 - LiteRT-LM runtime dependency in Kotlin code
+- markdown rendering in the Compose UI uses Mike Penz Multiplatform Markdown Renderer (`multiplatform-markdown-renderer-m3`)
 - DataStore for persisted settings
 - WorkManager still available in the dependency set
 

@@ -10,6 +10,7 @@ The app is built around Gemma 4 running through LiteRT-LM and is designed for a 
 - transcribes speech on-device using imported Gemma 4 LiteRT-LM models
 - stores transcripts and notes locally with Room
 - generates on-device titles, summaries, and meeting notes from saved transcripts
+- renders AI-generated summaries and meeting notes as markdown in the detail view
 - supports manual model import and selection inside the app
 
 ## Key Characteristics
@@ -36,6 +37,7 @@ These files are not bundled with the app. Download them externally, then import 
 - Hilt
 - Room
 - LiteRT-LM (`com.google.ai.edge.litertlm`)
+- Mike Penz Multiplatform Markdown Renderer (`com.mikepenz:multiplatform-markdown-renderer-m3`)
 - Android Foreground Service
 
 ## How Transcription Works
@@ -90,6 +92,7 @@ For command-line Gradle use on Windows:
 4. Import the model file and select it.
 5. Choose a transcription language if you know the spoken language, or leave it on `Auto`.
 6. Start a recording or open a saved note to run AI processing.
+7. View generated summaries and meeting notes with markdown formatting preserved in the note detail screen.
 
 ## Documentation
 
