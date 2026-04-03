@@ -1,6 +1,5 @@
 package com.example.voxtranscribe.data.gemma
 
-import android.content.Context
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -11,18 +10,17 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.math.max
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 @Singleton
 class GemmaRuntimeManager @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val settingsRepository: GemmaSettingsRepository,
     private val importRepository: GemmaImportRepository,
 ) {
@@ -30,19 +28,21 @@ class GemmaRuntimeManager @Inject constructor(
 
     private var loadedModelId: GemmaModelId? = null
     private var loadedModelPath: String? = null
+    private var loadedContextTokens: Int? = null
     private var engine: Engine? = null
 
-    suspend fun generateText(prompt: String, maxTokens: Int = 1024): String {
+    suspend fun generateText(prompt: String, requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS): String {
         return mutex.withLock {
             val selectedModelId = settingsRepository.selectedModelId.value
                 ?: throw IllegalStateException("No Gemma model is selected.")
             val modelPath = importRepository.getImportedModelPath(selectedModelId)
                 ?: throw IllegalStateException("The selected Gemma model is not imported.")
+            val requiredContextTokens = requiredContextTokens(requestedGenerationTokens)
 
             ensureEngineLoaded(
                 modelId = selectedModelId,
                 modelPath = modelPath,
-                maxTokens = maxTokens,
+                requiredContextTokens = requiredContextTokens,
             )
 
             val conversation = createConversation()
@@ -63,9 +63,14 @@ class GemmaRuntimeManager @Inject constructor(
     private fun ensureEngineLoaded(
         modelId: GemmaModelId,
         modelPath: String,
-        maxTokens: Int,
+        requiredContextTokens: Int,
     ) {
-        if (engine != null && loadedModelId == modelId && loadedModelPath == modelPath) {
+        if (
+            engine != null &&
+            loadedModelId == modelId &&
+            loadedModelPath == modelPath &&
+            (loadedContextTokens ?: 0) >= requiredContextTokens
+        ) {
             return
         }
 
@@ -80,13 +85,14 @@ class GemmaRuntimeManager @Inject constructor(
                     EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
-                        maxNumTokens = maxTokens,
+                        maxNumTokens = requiredContextTokens,
                     )
                 )
                 createdEngine.initialize()
                 engine = createdEngine
                 loadedModelId = modelId
                 loadedModelPath = modelPath
+                loadedContextTokens = requiredContextTokens
                 return
             } catch (e: Exception) {
                 lastError = e
@@ -149,5 +155,16 @@ class GemmaRuntimeManager @Inject constructor(
         engine = null
         loadedModelId = null
         loadedModelPath = null
+        loadedContextTokens = null
+    }
+
+    private fun requiredContextTokens(requestedGenerationTokens: Int): Int {
+        return max(MIN_CONTEXT_TOKENS, requestedGenerationTokens + CONTEXT_HEADROOM_TOKENS)
+    }
+
+    companion object {
+        private const val DEFAULT_GENERATION_TOKENS = 1024
+        private const val MIN_CONTEXT_TOKENS = 2048
+        private const val CONTEXT_HEADROOM_TOKENS = 512
     }
 }

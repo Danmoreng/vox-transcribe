@@ -20,7 +20,7 @@ class GemmaAiRepository @Inject constructor(
                 Transcript:
                 $transcript
             """.trimIndent(),
-            maxTokens = 512,
+            requestedGenerationTokens = 512,
         ).ifBlank { "No summary generated." }
     }
 
@@ -33,7 +33,7 @@ class GemmaAiRepository @Inject constructor(
                 Transcript:
                 $transcript
             """.trimIndent(),
-            maxTokens = 768,
+            requestedGenerationTokens = 768,
         ).ifBlank { "No meeting notes generated." }
     }
 
@@ -46,7 +46,7 @@ class GemmaAiRepository @Inject constructor(
                 Transcript:
                 $transcript
             """.trimIndent(),
-            maxTokens = 64,
+            requestedGenerationTokens = 64,
         ).trim().removePrefix("\"").removeSuffix("\"").ifBlank { "Untitled Note" }
     }
 }

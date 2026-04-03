@@ -43,9 +43,11 @@ fun DetailScreen(
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
     val isAiModelReady by viewModel.isAiModelReady.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
     
     val context = LocalContext.current
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
+    val snackbarHostState = remember { SnackbarHostState() }
     
     var selectedTab by remember { mutableStateOf(0) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -54,6 +56,12 @@ fun DetailScreen(
         if (isDeleted) {
             onNavigateBack()
         }
+    }
+
+    LaunchedEffect(errorMessage) {
+        val message = errorMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.clearErrorMessage()
     }
 
     if (showDeleteDialog) {
@@ -83,6 +91,7 @@ fun DetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(noteDetail?.note?.title ?: "Loading...") },
