@@ -29,6 +29,7 @@ class GemmaRuntimeManager @Inject constructor(
     private var loadedModelId: GemmaModelId? = null
     private var loadedModelPath: String? = null
     private var loadedContextTokens: Int? = null
+    private var loadedAudioEnabled = false
     private var engine: Engine? = null
 
     suspend fun generateText(prompt: String, requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS): String {
@@ -43,11 +44,45 @@ class GemmaRuntimeManager @Inject constructor(
                 modelId = selectedModelId,
                 modelPath = modelPath,
                 requiredContextTokens = requiredContextTokens,
+                enableAudio = false,
             )
 
             val conversation = createConversation()
             try {
-                runConversation(conversation, prompt)
+                runConversation(conversation, listOf(Content.Text(prompt)))
+            } finally {
+                conversation.close()
+            }
+        }
+    }
+
+    suspend fun transcribeAudioClip(
+        audioBytes: ByteArray,
+        requestedGenerationTokens: Int = DEFAULT_AUDIO_GENERATION_TOKENS,
+    ): String {
+        return mutex.withLock {
+            val selectedModelId = settingsRepository.selectedModelId.value
+                ?: throw IllegalStateException("No Gemma model is selected.")
+            val modelPath = importRepository.getImportedModelPath(selectedModelId)
+                ?: throw IllegalStateException("The selected Gemma model is not imported.")
+            val requiredContextTokens = requiredContextTokens(requestedGenerationTokens)
+
+            ensureEngineLoaded(
+                modelId = selectedModelId,
+                modelPath = modelPath,
+                requiredContextTokens = requiredContextTokens,
+                enableAudio = true,
+            )
+
+            val conversation = createConversation()
+            try {
+                runConversation(
+                    conversation = conversation,
+                    contents = listOf(
+                        Content.AudioBytes(audioBytes),
+                        Content.Text(DEFAULT_AUDIO_TRANSCRIPTION_PROMPT),
+                    ),
+                )
             } finally {
                 conversation.close()
             }
@@ -64,19 +99,25 @@ class GemmaRuntimeManager @Inject constructor(
         modelId: GemmaModelId,
         modelPath: String,
         requiredContextTokens: Int,
+        enableAudio: Boolean,
     ) {
         if (
             engine != null &&
             loadedModelId == modelId &&
             loadedModelPath == modelPath &&
-            (loadedContextTokens ?: 0) >= requiredContextTokens
+            (loadedContextTokens ?: 0) >= requiredContextTokens &&
+            (loadedAudioEnabled || !enableAudio)
         ) {
             return
         }
 
         closeEngine()
 
-        val backendsToTry = listOf(Backend.GPU(), Backend.CPU())
+        val backendsToTry = if (enableAudio) {
+            listOf(Backend.CPU())
+        } else {
+            listOf(Backend.GPU(), Backend.CPU())
+        }
         var lastError: Exception? = null
 
         for (backend in backendsToTry) {
@@ -85,6 +126,7 @@ class GemmaRuntimeManager @Inject constructor(
                     EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
+                        audioBackend = if (enableAudio) Backend.CPU() else null,
                         maxNumTokens = requiredContextTokens,
                     )
                 )
@@ -93,6 +135,7 @@ class GemmaRuntimeManager @Inject constructor(
                 loadedModelId = modelId
                 loadedModelPath = modelPath
                 loadedContextTokens = requiredContextTokens
+                loadedAudioEnabled = enableAudio
                 return
             } catch (e: Exception) {
                 lastError = e
@@ -120,12 +163,12 @@ class GemmaRuntimeManager @Inject constructor(
 
     private suspend fun runConversation(
         conversation: Conversation,
-        prompt: String,
+        contents: List<Content>,
     ): String = suspendCancellableCoroutine { continuation ->
         val response = StringBuilder()
 
         conversation.sendMessageAsync(
-            Contents.of(Content.Text(prompt)),
+            Contents.of(contents),
             object : MessageCallback {
                 override fun onMessage(message: Message) {
                     response.append(message.toString())
@@ -156,6 +199,7 @@ class GemmaRuntimeManager @Inject constructor(
         loadedModelId = null
         loadedModelPath = null
         loadedContextTokens = null
+        loadedAudioEnabled = false
     }
 
     private fun requiredContextTokens(requestedGenerationTokens: Int): Int {
@@ -164,7 +208,10 @@ class GemmaRuntimeManager @Inject constructor(
 
     companion object {
         private const val DEFAULT_GENERATION_TOKENS = 1024
+        private const val DEFAULT_AUDIO_GENERATION_TOKENS = 256
         private const val MIN_CONTEXT_TOKENS = 2048
         private const val CONTEXT_HEADROOM_TOKENS = 512
+        private const val DEFAULT_AUDIO_TRANSCRIPTION_PROMPT =
+            "Transcribe the spoken audio exactly. Preserve the original language. Return only the transcript text."
     }
 }

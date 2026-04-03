@@ -17,28 +17,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        externalNativeBuild {
-            cmake {
-                cppFlags("")
-                abiFilters("arm64-v8a")
-                arguments(
-                    "-DGGML_OPENCL=ON",
-                    "-DVOXTRAL_AUTO_DETECT_OPENCL=ON",
-                    "-DGGML_OPENCL_EMBED_KERNELS=ON",
-                    "-DGGML_OPENCL_USE_ADRENO_KERNELS=ON",
-                    "-DGGML_VULKAN=OFF",
-                    "-DVOXTRAL_AUTO_DETECT_VULKAN=OFF"
-                )
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     buildTypes {
@@ -58,11 +36,6 @@ android {
         compose = true
     }
 
-    packaging {
-        jniLibs {
-            excludes += "**/libOpenCL.so"
-        }
-    }
 }
 
 dependencies {
@@ -83,10 +56,6 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore)
     implementation(libs.litertlm)
-    implementation(libs.mediapipe.genai)
-    implementation(libs.mlkit.genai.prompt)
-    implementation(libs.kotlinx.coroutines.play.services)
-    implementation(libs.kotlinx.coroutines.guava)
 
     // Hilt
     implementation(libs.hilt.android)

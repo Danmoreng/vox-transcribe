@@ -87,7 +87,8 @@ class TranscriptionViewModel @Inject constructor(
 
     fun startRecording() {
         if (_isListening.value) return
-        if (speechRepository.engineState.value != com.example.voxtranscribe.data.EngineState.Ready) return
+        if (speechRepository.engineState.value == com.example.voxtranscribe.data.EngineState.Error) return
+        if (speechRepository.engineState.value == com.example.voxtranscribe.data.EngineState.Uninitialized) return
         
         viewModelScope.launch {
             _accumulatedText.value = ""

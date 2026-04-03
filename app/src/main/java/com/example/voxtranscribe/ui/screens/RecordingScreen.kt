@@ -56,6 +56,8 @@ fun RecordingScreen(
     LaunchedEffect(engineState) {
         if (engineState == com.example.voxtranscribe.data.EngineState.Ready) {
             Toast.makeText(context, "Engine Loaded - Ready to Record", Toast.LENGTH_SHORT).show()
+        } else if (engineState == com.example.voxtranscribe.data.EngineState.Uninitialized) {
+            Toast.makeText(context, "Import and select a Gemma model before recording", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -143,7 +145,7 @@ fun RecordingScreen(
                 ) {
                     StatItem(
                         label = "Engine",
-                        value = if (stats.isOffline) "Offline" else "Online",
+                        value = if (stats.isOffline) "Gemma" else "Unknown",
                         color = if (stats.isOffline) MaterialTheme.colorScheme.primary else Color.Gray
                     )
                     StatItem(

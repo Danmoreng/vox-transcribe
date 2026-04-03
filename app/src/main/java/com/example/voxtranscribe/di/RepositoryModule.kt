@@ -1,6 +1,7 @@
 package com.example.voxtranscribe.di
 
 import com.example.voxtranscribe.data.NotesRepository
+import com.example.voxtranscribe.data.GemmaTranscriptionRepository
 import com.example.voxtranscribe.data.ai.AiRepository
 import com.example.voxtranscribe.data.ai.GemmaAiRepository
 import com.example.voxtranscribe.data.db.NotesDao
@@ -18,9 +19,9 @@ object RepositoryModule {
     @Provides
     @Singleton
     fun provideTranscriptionRepository(
-        dynamicRepo: com.example.voxtranscribe.data.DynamicTranscriptionRepository
+        gemmaRepo: GemmaTranscriptionRepository
     ): TranscriptionRepository {
-        return dynamicRepo
+        return gemmaRepo
     }
 
     @Provides
