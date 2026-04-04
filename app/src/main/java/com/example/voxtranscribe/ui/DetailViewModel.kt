@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.ai.AiRepository
+import com.example.voxtranscribe.data.ai.AiOutputLanguage
+import com.example.voxtranscribe.data.ai.AiSummaryStyle
 import com.example.voxtranscribe.data.gemma.GemmaImportRepository
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.db.NoteWithSegments
@@ -16,6 +18,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class DetailAiPreferencesUiState(
+    val outputLanguage: AiOutputLanguage = AiOutputLanguage.MATCH_TRANSCRIPT,
+    val summaryStyle: AiSummaryStyle = AiSummaryStyle.EXECUTIVE,
+)
 
 @HiltViewModel
 class DetailViewModel @Inject constructor(
@@ -33,6 +40,20 @@ class DetailViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    val aiPreferences: StateFlow<DetailAiPreferencesUiState> = combine(
+        gemmaSettingsRepository.aiOutputLanguage,
+        gemmaSettingsRepository.aiSummaryStyle,
+    ) { outputLanguage, summaryStyle ->
+        DetailAiPreferencesUiState(
+            outputLanguage = outputLanguage,
+            summaryStyle = summaryStyle,
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        DetailAiPreferencesUiState(),
+    )
 
     val isAiModelReady: StateFlow<Boolean> = combine(
         gemmaImportRepository.modelStatuses,
@@ -81,6 +102,18 @@ class DetailViewModel @Inject constructor(
 
     fun clearErrorMessage() {
         _errorMessage.value = null
+    }
+
+    fun setAiOutputLanguage(language: AiOutputLanguage) {
+        viewModelScope.launch {
+            gemmaSettingsRepository.setAiOutputLanguage(language)
+        }
+    }
+
+    fun setAiSummaryStyle(style: AiSummaryStyle) {
+        viewModelScope.launch {
+            gemmaSettingsRepository.setAiSummaryStyle(style)
+        }
     }
 
     fun deleteNote(note: com.example.voxtranscribe.data.db.Note) {

@@ -1,5 +1,10 @@
 package com.example.voxtranscribe.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,8 +14,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -18,11 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.data.ai.AiOutputLanguage
+import com.example.voxtranscribe.data.ai.AiSummaryStyle
 import com.example.voxtranscribe.ui.DetailViewModel
-import android.content.ClipboardManager
-import android.content.ClipData
-import android.content.Context
-import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -45,6 +51,7 @@ fun DetailScreen(
     val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
     val isAiModelReady by viewModel.isAiModelReady.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val aiPreferences by viewModel.aiPreferences.collectAsStateWithLifecycle()
     
     val context = LocalContext.current
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
@@ -52,6 +59,7 @@ fun DetailScreen(
     
     var selectedTab by remember { mutableStateOf(0) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showAiSettings by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(isDeleted) {
         if (isDeleted) {
@@ -182,6 +190,20 @@ fun DetailScreen(
                         Icon(Icons.Default.Delete, contentDescription = "Delete")
                     }
                 }
+
+                if (isAiModelReady) {
+                    AiPreferencesCard(
+                        outputLanguage = aiPreferences.outputLanguage,
+                        summaryStyle = aiPreferences.summaryStyle,
+                        expanded = showAiSettings,
+                        onToggleExpanded = { showAiSettings = !showAiSettings },
+                        onOutputLanguageSelected = viewModel::setAiOutputLanguage,
+                        onSummaryStyleSelected = viewModel::setAiSummaryStyle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
             }
@@ -204,6 +226,100 @@ fun DetailScreen(
                 }
             } ?: Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                 CircularProgressIndicator()
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiPreferencesCard(
+    outputLanguage: AiOutputLanguage,
+    summaryStyle: AiSummaryStyle,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onOutputLanguageSelected: (AiOutputLanguage) -> Unit,
+    onSummaryStyleSelected: (AiSummaryStyle) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedButton(
+                onClick = onToggleExpanded,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "AI Output Settings",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Language: ${outputLanguage.displayName}  |  Style: ${summaryStyle.displayName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse AI output settings" else "Expand AI output settings",
+                )
+            }
+            if (expanded) {
+                Text(
+                    text = "Choose the output language and summary style before running AI processing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PreferenceChipRow(
+                    title = "Output Language",
+                    entries = AiOutputLanguage.entries.toList(),
+                    selected = outputLanguage,
+                    label = { it.displayName },
+                    onSelected = onOutputLanguageSelected,
+                )
+                PreferenceChipRow(
+                    title = "Summary Style",
+                    entries = AiSummaryStyle.entries.toList(),
+                    selected = summaryStyle,
+                    label = { it.displayName },
+                    onSelected = onSummaryStyleSelected,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> PreferenceChipRow(
+    title: String,
+    entries: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelected: (T) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            entries.forEach { entry ->
+                FilterChip(
+                    selected = selected == entry,
+                    onClick = { onSelected(entry) },
+                    label = { Text(label(entry)) },
+                )
             }
         }
     }

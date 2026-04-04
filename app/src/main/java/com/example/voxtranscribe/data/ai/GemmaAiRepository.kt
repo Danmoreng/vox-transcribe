@@ -1,5 +1,6 @@
 package com.example.voxtranscribe.data.ai
 
+import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import java.util.Locale
 import javax.inject.Inject
@@ -10,17 +11,21 @@ import kotlinx.coroutines.withContext
 @Singleton
 class GemmaAiRepository @Inject constructor(
     private val runtimeManager: GemmaRuntimeManager,
+    private val settingsRepository: GemmaSettingsRepository,
 ) : AiRepository {
 
     override suspend fun summarize(transcript: String): String = withContext(Dispatchers.IO) {
+        val preferences = currentPreferences()
         generateTranscriptOutput(
             transcript = transcript,
             requestedGenerationTokens = SUMMARY_GENERATION_TOKENS,
             fallbackValue = "No summary generated.",
             promptBuilder = { text ->
                 """
-                    Provide a short executive summary of the following meeting transcript.
-                    Focus on the key discussion points, decisions, and outcomes.
+                    Summarize the following meeting transcript.
+                    ${preferences.outputLanguage.promptInstruction}
+                    ${preferences.summaryStyle.summaryInstruction}
+                    Do not invent facts.
 
                     Transcript:
                     $text
@@ -28,8 +33,10 @@ class GemmaAiRepository @Inject constructor(
             },
             reducerPromptBuilder = { partials ->
                 """
-                    Combine the following partial meeting summaries into one short executive summary.
-                    Keep only the most important discussion points, decisions, and outcomes.
+                    Combine the following partial meeting summaries into one coherent final summary.
+                    ${preferences.outputLanguage.promptInstruction}
+                    ${preferences.summaryStyle.summaryInstruction}
+                    Deduplicate overlap and preserve only information supported by the transcript.
 
                     Partial summaries:
                     $partials
@@ -39,14 +46,17 @@ class GemmaAiRepository @Inject constructor(
     }
 
     override suspend fun generateMeetingNotes(transcript: String): String = withContext(Dispatchers.IO) {
+        val preferences = currentPreferences()
         generateTranscriptOutput(
             transcript = transcript,
             requestedGenerationTokens = NOTES_GENERATION_TOKENS,
             fallbackValue = "No meeting notes generated.",
             promptBuilder = { text ->
                 """
-                    Generate concise bulleted meeting notes from the following transcript.
-                    Include decisions, action items, and important follow-ups.
+                    Generate meeting notes from the following transcript.
+                    ${preferences.outputLanguage.promptInstruction}
+                    ${preferences.summaryStyle.notesInstruction}
+                    Keep the notes faithful to the transcript and avoid repetition.
 
                     Transcript:
                     $text
@@ -54,8 +64,10 @@ class GemmaAiRepository @Inject constructor(
             },
             reducerPromptBuilder = { partials ->
                 """
-                    Merge the following partial meeting notes into one concise bulleted note set.
-                    Deduplicate overlapping points and preserve decisions, action items, and important follow-ups.
+                    Merge the following partial meeting notes into one final note set.
+                    ${preferences.outputLanguage.promptInstruction}
+                    ${preferences.summaryStyle.notesInstruction}
+                    Deduplicate overlap and preserve decisions, action items, and important follow-ups.
 
                     Partial meeting notes:
                     $partials
@@ -65,12 +77,14 @@ class GemmaAiRepository @Inject constructor(
     }
 
     override suspend fun generateTitle(transcript: String): String = withContext(Dispatchers.IO) {
+        val preferences = currentPreferences()
         val cleanedTranscript = sanitizeTranscriptForPrompt(transcript)
         val titleTranscript = truncateTranscriptForPrompt(cleanedTranscript, TITLE_TRANSCRIPT_CHAR_LIMIT)
         runtimeManager.generateText(
             prompt = """
                 Generate a short professional title for the following meeting transcript.
                 Return only the title text and keep it under 5 words.
+                ${preferences.outputLanguage.promptInstruction}
 
                 Transcript:
                 $titleTranscript
@@ -253,6 +267,18 @@ class GemmaAiRepository @Inject constructor(
         return message.contains("Input token ids are too long", ignoreCase = true) ||
             (message.contains("context", ignoreCase = true) && message.contains("too long", ignoreCase = true))
     }
+
+    private fun currentPreferences(): AiPromptPreferences {
+        return AiPromptPreferences(
+            outputLanguage = settingsRepository.aiOutputLanguage.value,
+            summaryStyle = settingsRepository.aiSummaryStyle.value,
+        )
+    }
+
+    private data class AiPromptPreferences(
+        val outputLanguage: AiOutputLanguage,
+        val summaryStyle: AiSummaryStyle,
+    )
 
     private companion object {
         const val SUMMARY_GENERATION_TOKENS = 512
