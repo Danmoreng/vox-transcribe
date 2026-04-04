@@ -1,6 +1,9 @@
 package com.example.voxtranscribe.data.gemma
 
+import android.content.Context
 import android.util.Log
+import com.google.android.gms.tasks.Tasks
+import com.google.android.gms.tflite.gpu.support.TfLiteGpu
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -11,6 +14,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -22,6 +26,7 @@ import kotlinx.coroutines.sync.withLock
 
 @Singleton
 class GemmaRuntimeManager @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsRepository: GemmaSettingsRepository,
     private val importRepository: GemmaImportRepository,
 ) {
@@ -32,6 +37,8 @@ class GemmaRuntimeManager @Inject constructor(
     private var loadedContextTokens: Int? = null
     private var loadedAudioEnabled = false
     private var engine: Engine? = null
+    private var gpuAvailabilityChecked = false
+    private var gpuDelegateAvailable = false
 
     suspend fun generateText(prompt: String, requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS): String {
         return mutex.withLock {
@@ -119,7 +126,7 @@ class GemmaRuntimeManager @Inject constructor(
 
         closeEngine()
 
-        val backendsToTry = listOf(Backend.CPU())
+        val backendsToTry = buildBackendsToTry()
         var lastError: Throwable? = null
 
         for (backend in backendsToTry) {
@@ -134,6 +141,7 @@ class GemmaRuntimeManager @Inject constructor(
                     )
                 )
                 createdEngine.initialize()
+                Log.i(TAG, "Initialized Gemma engine with backend=${backend.label()}")
                 engine = createdEngine
                 loadedModelId = modelId
                 loadedModelPath = modelPath
@@ -151,6 +159,31 @@ class GemmaRuntimeManager @Inject constructor(
             "Failed to initialize the selected Gemma model.",
             lastError,
         )
+    }
+
+    private fun buildBackendsToTry(): List<Backend> {
+        val backends = mutableListOf<Backend>()
+        if (isGpuDelegateAvailable()) {
+            backends += Backend.GPU()
+        }
+        backends += Backend.CPU()
+        return backends
+    }
+
+    private fun isGpuDelegateAvailable(): Boolean {
+        if (gpuAvailabilityChecked) {
+            return gpuDelegateAvailable
+        }
+
+        gpuDelegateAvailable = try {
+            Tasks.await(TfLiteGpu.isGpuDelegateAvailable(context))
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to determine LiteRT GPU delegate availability. Falling back to CPU.", t)
+            false
+        }
+        gpuAvailabilityChecked = true
+        Log.i(TAG, "LiteRT GPU delegate available=$gpuDelegateAvailable")
+        return gpuDelegateAvailable
     }
 
     private fun createConversation(
@@ -262,5 +295,14 @@ class GemmaRuntimeManager @Inject constructor(
             "Return only the transcript for this audio clip."
         private const val AUDIO_USER_PROMPT_WITH_CONTEXT_TEMPLATE =
             "Continue after this confirmed context and do not repeat it:%n%s%nReturn only the new transcript for this audio clip."
+    }
+}
+
+private fun Backend.label(): String {
+    return when (this) {
+        is Backend.CPU -> "cpu"
+        is Backend.GPU -> "gpu"
+        is Backend.NPU -> "npu"
+        else -> this::class.simpleName ?: "unknown"
     }
 }

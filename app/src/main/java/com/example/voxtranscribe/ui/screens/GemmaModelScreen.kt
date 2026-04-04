@@ -137,7 +137,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Inference currently runs on CPU only for both transcription and text processing. The GPU backend is temporarily disabled because the current LiteRT-LM runtime path is not reliable on supported test devices.",
+                text = "Inference now prefers the LiteRT GPU backend when the device exposes a compatible delegate. If GPU is unavailable or initialization fails, the app falls back to CPU automatically.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

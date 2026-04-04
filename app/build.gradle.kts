@@ -57,6 +57,9 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore)
     implementation(libs.litertlm)
+    implementation(libs.tflite.play.services)
+    implementation(libs.tflite.play.services.gpu)
+    implementation(libs.tflite.play.services.support)
 
     // Hilt
     implementation(libs.hilt.android)

@@ -19,7 +19,7 @@ The app is built around Gemma 4 running through LiteRT-LM and is designed for a 
 - no in-app authentication
 - no cloud fallback
 - one selected Gemma model used for both transcription and text tasks
-- all inference currently runs on CPU; the GPU backend is temporarily disabled
+- inference prefers the LiteRT GPU backend when a compatible delegate is available, and falls back to CPU automatically
 - live transcription optimized for long-form recordings through clip scheduling and transcript stitching
 - note titles are generated automatically after recording stops; summaries and meeting notes remain manual
 
@@ -54,8 +54,8 @@ Live transcription uses bounded audio clips rather than a single continuous stre
 
 Current runtime note:
 
-- both transcription and text-generation tasks currently run on CPU
-- the GPU path is temporarily disabled because the current LiteRT-LM runtime stack is not reliable on supported test devices
+- both transcription and text-generation tasks prefer the LiteRT GPU backend when supported on the device
+- the app checks GPU delegate availability first and falls back to CPU automatically if GPU is unavailable or engine initialization fails
 
 The app also includes optional transcription language guidance:
 

@@ -145,8 +145,8 @@ Current operating point:
 
 Current behavior:
 
-- all LiteRT-LM sessions currently run on CPU
-- the GPU backend is temporarily disabled because the current runtime path is not reliable on supported test devices
+- LiteRT-LM sessions now prefer the GPU backend when a compatible delegate is available
+- if GPU support is unavailable or engine initialization fails, the runtime falls back to CPU automatically
 - if inference falls behind, clips are dropped and the UI shows a catch-up message
 - clips that end on silence are finalized without overlap
 - clips that are force-cut at max duration keep short overlap and use delayed merge
@@ -248,7 +248,7 @@ Current screen responsibilities:
 - import model files
 - select active model
 - select transcription language guidance
-- explain that inference is currently CPU-only
+- explain that inference prefers GPU and falls back to CPU automatically
 - delete imported model files
 - render AI-generated summaries and meeting notes as markdown in the note detail screen
 
@@ -265,7 +265,7 @@ Current platform assumptions:
 - `minSdk 31`
 - no app-module JNI/CMake/native inference code
 - LiteRT-LM runtime dependency in Kotlin code
-- CPU-only inference path enabled in the app for now
+- GPU-preferred inference path enabled with automatic CPU fallback
 - markdown rendering in the Compose UI uses Mike Penz Multiplatform Markdown Renderer (`multiplatform-markdown-renderer-m3`)
 - DataStore for persisted settings
 - WorkManager still available in the dependency set
