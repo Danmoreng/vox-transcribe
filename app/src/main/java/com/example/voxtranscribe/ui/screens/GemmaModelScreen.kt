@@ -141,6 +141,13 @@ fun GemmaModelScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            RuntimeStatusCard(
+                gpuDelegateAvailable = uiState.runtimeGpuDelegateAvailable,
+                activeBackend = uiState.runtimeActiveBackend,
+                audioBackend = uiState.runtimeAudioBackend,
+                fallbackReason = uiState.runtimeFallbackReason,
+            )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { launcher.launch("*/*") },
@@ -172,6 +179,74 @@ fun GemmaModelScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun RuntimeStatusCard(
+    gpuDelegateAvailable: Boolean?,
+    activeBackend: String?,
+    audioBackend: String?,
+    fallbackReason: String?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            RuntimeStatusRow(
+                label = "GPU Delegate",
+                value = when (gpuDelegateAvailable) {
+                    true -> "Available"
+                    false -> "Unavailable"
+                    null -> "Not checked yet"
+                },
+            )
+            RuntimeStatusRow(
+                label = "Active Backend",
+                value = activeBackend?.uppercase() ?: "Not initialized yet",
+            )
+            RuntimeStatusRow(
+                label = "Audio Backend",
+                value = audioBackend?.uppercase() ?: "Disabled",
+            )
+            if (!fallbackReason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = fallbackReason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RuntimeStatusRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

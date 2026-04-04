@@ -20,6 +20,9 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.max
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,6 +42,8 @@ class GemmaRuntimeManager @Inject constructor(
     private var engine: Engine? = null
     private var gpuAvailabilityChecked = false
     private var gpuDelegateAvailable = false
+    private val _runtimeStatus = MutableStateFlow(GemmaRuntimeStatus())
+    val runtimeStatus: StateFlow<GemmaRuntimeStatus> = _runtimeStatus.asStateFlow()
 
     suspend fun generateText(prompt: String, requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS): String {
         return mutex.withLock {
@@ -129,6 +134,8 @@ class GemmaRuntimeManager @Inject constructor(
         val backendsToTry = buildBackendsToTry()
         var lastError: Throwable? = null
 
+        var fallbackReason: String? = null
+
         for (backend in backendsToTry) {
             var createdEngine: Engine? = null
             try {
@@ -147,14 +154,27 @@ class GemmaRuntimeManager @Inject constructor(
                 loadedModelPath = modelPath
                 loadedContextTokens = requiredContextTokens
                 loadedAudioEnabled = enableAudio
+                _runtimeStatus.value = _runtimeStatus.value.copy(
+                    activeBackend = backend.label(),
+                    audioBackend = if (enableAudio) Backend.CPU().label() else null,
+                    fallbackReason = fallbackReason,
+                )
                 return
             } catch (t: Throwable) {
                 runCatching { createdEngine?.close() }
                 Log.w(TAG, "Failed to initialize Gemma engine with backend=$backend", t)
+                if (backend is Backend.GPU) {
+                    fallbackReason = buildFallbackReason(t)
+                }
                 lastError = t
             }
         }
 
+        _runtimeStatus.value = _runtimeStatus.value.copy(
+            activeBackend = null,
+            audioBackend = if (enableAudio) Backend.CPU().label() else null,
+            fallbackReason = buildFallbackReason(lastError),
+        )
         throw IllegalStateException(
             "Failed to initialize the selected Gemma model.",
             lastError,
@@ -182,6 +202,7 @@ class GemmaRuntimeManager @Inject constructor(
             false
         }
         gpuAvailabilityChecked = true
+        _runtimeStatus.value = _runtimeStatus.value.copy(gpuDelegateAvailable = gpuDelegateAvailable)
         Log.i(TAG, "LiteRT GPU delegate available=$gpuDelegateAvailable")
         return gpuDelegateAvailable
     }
@@ -253,6 +274,10 @@ class GemmaRuntimeManager @Inject constructor(
         loadedModelPath = null
         loadedContextTokens = null
         loadedAudioEnabled = false
+        _runtimeStatus.value = _runtimeStatus.value.copy(
+            activeBackend = null,
+            audioBackend = null,
+        )
     }
 
     private fun requiredContextTokens(requestedGenerationTokens: Int): Int {
@@ -279,6 +304,14 @@ class GemmaRuntimeManager @Inject constructor(
                 "Return only the spoken words in $languageLabel. Do not translate. " +
                 "Do not explain. Do not answer the speaker. Do not repeat instructions or prior context."
         }
+    }
+
+    private fun buildFallbackReason(throwable: Throwable?): String? {
+        val message = throwable?.message?.trim().orEmpty()
+        if (message.isBlank()) {
+            return null
+        }
+        return "GPU initialization failed: $message"
     }
 
     companion object {

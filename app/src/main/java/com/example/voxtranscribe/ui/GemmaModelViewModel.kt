@@ -7,6 +7,7 @@ import com.example.voxtranscribe.data.gemma.GemmaImportRepository
 import com.example.voxtranscribe.data.gemma.GemmaImportResult
 import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaModelId
+import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,10 @@ data class GemmaModelUiState(
     val models: List<GemmaModelCardUiState> = emptyList(),
     val selectedModelId: GemmaModelId? = null,
     val transcriptionLanguage: GemmaTranscriptionLanguage = GemmaTranscriptionLanguage.AUTO,
+    val runtimeGpuDelegateAvailable: Boolean? = null,
+    val runtimeActiveBackend: String? = null,
+    val runtimeAudioBackend: String? = null,
+    val runtimeFallbackReason: String? = null,
     val isImporting: Boolean = false,
     val message: String? = null,
 )
@@ -36,6 +41,7 @@ data class GemmaModelUiState(
 class GemmaModelViewModel @Inject constructor(
     private val settingsRepository: GemmaSettingsRepository,
     private val importRepository: GemmaImportRepository,
+    private val runtimeManager: GemmaRuntimeManager,
 ) : ViewModel() {
 
     private val _isImporting = MutableStateFlow(false)
@@ -45,7 +51,8 @@ class GemmaModelViewModel @Inject constructor(
         importRepository.modelStatuses,
         settingsRepository.selectedModelId,
         settingsRepository.transcriptionLanguage,
-    ) { statuses, selectedModelId, transcriptionLanguage ->
+        runtimeManager.runtimeStatus,
+    ) { statuses, selectedModelId, transcriptionLanguage, runtimeStatus ->
         val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
         val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
         GemmaModelUiState(
@@ -57,6 +64,10 @@ class GemmaModelViewModel @Inject constructor(
             },
             selectedModelId = resolvedSelectedModelId,
             transcriptionLanguage = transcriptionLanguage,
+            runtimeGpuDelegateAvailable = runtimeStatus.gpuDelegateAvailable,
+            runtimeActiveBackend = runtimeStatus.activeBackend,
+            runtimeAudioBackend = runtimeStatus.audioBackend,
+            runtimeFallbackReason = runtimeStatus.fallbackReason,
         )
     }
 
