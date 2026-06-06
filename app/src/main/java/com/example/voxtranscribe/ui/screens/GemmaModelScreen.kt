@@ -48,7 +48,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.ui.GemmaModelCardUiState
 import com.example.voxtranscribe.ui.GemmaModelViewModel
+import com.example.voxtranscribe.ui.ParakeetModelCardUiState
 import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
+import com.example.voxtranscribe.data.parakeet.ParakeetTranscriptionLanguage
 import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,10 +63,16 @@ fun GemmaModelScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
 
-    val launcher = rememberLauncherForActivityResult(
+    val gemmaLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let(viewModel::importModel)
+    }
+
+    val parakeetLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let(viewModel::importParakeetModel)
     }
 
     LaunchedEffect(uiState.message) {
@@ -76,7 +84,7 @@ fun GemmaModelScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gemma Model Management") },
+                title = { Text("Model Management") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -95,12 +103,12 @@ fun GemmaModelScreen(
             verticalArrangement = Arrangement.Top
         ) {
             Text(
-                text = "Gemma Import",
+                text = "Realtime Transcription",
                 style = MaterialTheme.typography.headlineSmall,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "This app does not download models or ask for authentication. Download one of the supported Gemma 4 LiteRT-LM files externally, then import it here.",
+                text = "Import the GGUF file for nvidia/nemotron-3.5-asr-streaming-0.6b. The app runs it through parakeet.cpp on CPU first; GPU support can be enabled later through the same native bridge.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -121,10 +129,10 @@ fun GemmaModelScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                GemmaTranscriptionLanguage.entries.forEach { language ->
+                ParakeetTranscriptionLanguage.entries.forEach { language ->
                     FilterChip(
-                        selected = uiState.transcriptionLanguage == language,
-                        onClick = { viewModel.setTranscriptionLanguage(language) },
+                        selected = uiState.parakeetTranscriptionLanguage == language,
+                        onClick = { viewModel.setParakeetTranscriptionLanguage(language) },
                         label = { Text(language.displayName) },
                     )
                 }
@@ -137,26 +145,26 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Inference now prefers the LiteRT GPU backend when the device exposes a compatible delegate. If GPU is unavailable or initialization fails, the app falls back to CPU automatically.",
+                text = "The current Parakeet build targets arm64-v8a and runs on CPU. Vulkan scaffolding is present, but disabled until shader generation is reliable on the Android build.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(12.dp))
-            RuntimeStatusCard(
-                gpuDelegateAvailable = uiState.runtimeGpuDelegateAvailable,
-                activeBackend = uiState.runtimeActiveBackend,
-                audioBackend = uiState.runtimeAudioBackend,
-                fallbackReason = uiState.runtimeFallbackReason,
+            ParakeetRuntimeStatusCard(
+                abiVersion = uiState.parakeetRuntimeAbiVersion,
+                activeBackend = uiState.parakeetRuntimeActiveBackend,
+                activeLanguage = uiState.parakeetRuntimeActiveLanguage,
+                lastError = uiState.parakeetRuntimeLastError,
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { launcher.launch("*/*") },
+                onClick = { parakeetLauncher.launch("*/*") },
                 enabled = !uiState.isImporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.padding(4.dp))
-                Text("Import .litertlm Model File")
+                Text("Import Nemotron .gguf Model File")
             }
 
             if (uiState.isImporting) {
@@ -170,6 +178,70 @@ fun GemmaModelScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+            uiState.parakeetModels.forEach { model ->
+                ParakeetModelCard(
+                    model = model,
+                    onSelect = { viewModel.selectParakeetModel(model.status.spec.id) },
+                    onDelete = { viewModel.deleteParakeetModel(model.status.spec.id) },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Gemma Import",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Gemma remains available for title generation and AI note features. Download one of the supported Gemma 4 LiteRT-LM files externally, then import it here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Gemma Audio Language",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GemmaTranscriptionLanguage.entries.forEach { language ->
+                    FilterChip(
+                        selected = uiState.transcriptionLanguage == language,
+                        onClick = { viewModel.setTranscriptionLanguage(language) },
+                        label = { Text(language.displayName) },
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Gemma Runtime",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            RuntimeStatusCard(
+                gpuDelegateAvailable = uiState.runtimeGpuDelegateAvailable,
+                activeBackend = uiState.runtimeActiveBackend,
+                audioBackend = uiState.runtimeAudioBackend,
+                fallbackReason = uiState.runtimeFallbackReason,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { gemmaLauncher.launch("*/*") },
+                enabled = !uiState.isImporting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null)
+                Spacer(modifier = Modifier.padding(4.dp))
+                Text("Import Gemma .litertlm Model File")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
             uiState.models.forEach { model ->
                 GemmaModelCard(
                     model = model,
@@ -177,6 +249,47 @@ fun GemmaModelScreen(
                     onDelete = { viewModel.deleteModel(model.status.spec.id) },
                 )
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParakeetRuntimeStatusCard(
+    abiVersion: Int?,
+    activeBackend: String?,
+    activeLanguage: String?,
+    lastError: String?,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            RuntimeStatusRow(
+                label = "Native ABI",
+                value = abiVersion?.toString() ?: "Not loaded yet",
+            )
+            RuntimeStatusRow(
+                label = "Active Backend",
+                value = activeBackend?.uppercase() ?: "CPU",
+            )
+            RuntimeStatusRow(
+                label = "Language",
+                value = activeLanguage ?: "auto",
+            )
+            if (!lastError.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = lastError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
@@ -247,6 +360,98 @@ private fun RuntimeStatusRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
         )
+    }
+}
+
+@Composable
+private fun ParakeetModelCard(
+    model: ParakeetModelCardUiState,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (model.isSelected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = model.status.spec.displayName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = model.status.spec.sourceModel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = if (model.isSelected) {
+                        Icons.Default.RadioButtonChecked
+                    } else {
+                        Icons.Default.RadioButtonUnchecked
+                    },
+                    contentDescription = null,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Minimum device memory: ${model.status.spec.minDeviceMemoryGb} GB",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (model.status.isImported) {
+                    "Imported size: ${formatSize(model.status.fileSizeBytes)}"
+                } else {
+                    "Not imported"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (model.status.isImported) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSelect,
+                    enabled = model.status.isImported && !model.isSelected,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (model.isSelected) "Selected" else "Use This Model")
+                }
+                TextButton(
+                    onClick = onDelete,
+                    enabled = model.status.isImported,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.padding(2.dp))
+                    Text("Delete")
+                }
+            }
+        }
     }
 }
 

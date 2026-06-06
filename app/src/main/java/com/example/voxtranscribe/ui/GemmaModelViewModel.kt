@@ -10,6 +10,13 @@ import com.example.voxtranscribe.data.gemma.GemmaModelId
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
+import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
+import com.example.voxtranscribe.data.parakeet.ParakeetImportResult
+import com.example.voxtranscribe.data.parakeet.ParakeetImportedModelStatus
+import com.example.voxtranscribe.data.parakeet.ParakeetModelId
+import com.example.voxtranscribe.data.parakeet.ParakeetRuntimeManager
+import com.example.voxtranscribe.data.parakeet.ParakeetSettingsRepository
+import com.example.voxtranscribe.data.parakeet.ParakeetTranscriptionLanguage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +32,19 @@ data class GemmaModelCardUiState(
     val isSelected: Boolean,
 )
 
+data class ParakeetModelCardUiState(
+    val status: ParakeetImportedModelStatus,
+    val isSelected: Boolean,
+)
+
 data class GemmaModelUiState(
+    val parakeetModels: List<ParakeetModelCardUiState> = emptyList(),
+    val selectedParakeetModelId: ParakeetModelId? = null,
+    val parakeetTranscriptionLanguage: ParakeetTranscriptionLanguage = ParakeetTranscriptionLanguage.AUTO,
+    val parakeetRuntimeAbiVersion: Int? = null,
+    val parakeetRuntimeActiveBackend: String? = null,
+    val parakeetRuntimeActiveLanguage: String? = null,
+    val parakeetRuntimeLastError: String? = null,
     val models: List<GemmaModelCardUiState> = emptyList(),
     val selectedModelId: GemmaModelId? = null,
     val transcriptionLanguage: GemmaTranscriptionLanguage = GemmaTranscriptionLanguage.AUTO,
@@ -42,12 +61,15 @@ class GemmaModelViewModel @Inject constructor(
     private val settingsRepository: GemmaSettingsRepository,
     private val importRepository: GemmaImportRepository,
     private val runtimeManager: GemmaRuntimeManager,
+    private val parakeetSettingsRepository: ParakeetSettingsRepository,
+    private val parakeetImportRepository: ParakeetImportRepository,
+    private val parakeetRuntimeManager: ParakeetRuntimeManager,
 ) : ViewModel() {
 
     private val _isImporting = MutableStateFlow(false)
     private val _message = MutableStateFlow<String?>(null)
 
-    private val settingsUiState = combine(
+    private val gemmaSettingsUiState = combine(
         importRepository.modelStatuses,
         settingsRepository.selectedModelId,
         settingsRepository.transcriptionLanguage,
@@ -71,6 +93,45 @@ class GemmaModelViewModel @Inject constructor(
         )
     }
 
+    private val parakeetSettingsUiState = combine(
+        parakeetImportRepository.modelStatuses,
+        parakeetSettingsRepository.selectedModelId,
+        parakeetSettingsRepository.transcriptionLanguage,
+        parakeetRuntimeManager.runtimeStatus,
+    ) { statuses, selectedModelId, transcriptionLanguage, runtimeStatus ->
+        val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
+        val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
+        ParakeetSettingsUiState(
+            models = statuses.map { status ->
+                ParakeetModelCardUiState(
+                    status = status,
+                    isSelected = resolvedSelectedModelId == status.spec.id,
+                )
+            },
+            selectedModelId = resolvedSelectedModelId,
+            transcriptionLanguage = transcriptionLanguage,
+            runtimeAbiVersion = runtimeStatus.abiVersion,
+            runtimeActiveBackend = runtimeStatus.activeBackend,
+            runtimeActiveLanguage = runtimeStatus.activeLanguage,
+            runtimeLastError = runtimeStatus.lastError,
+        )
+    }
+
+    private val settingsUiState = combine(
+        gemmaSettingsUiState,
+        parakeetSettingsUiState,
+    ) { gemmaState, parakeetState ->
+        gemmaState.copy(
+            parakeetModels = parakeetState.models,
+            selectedParakeetModelId = parakeetState.selectedModelId,
+            parakeetTranscriptionLanguage = parakeetState.transcriptionLanguage,
+            parakeetRuntimeAbiVersion = parakeetState.runtimeAbiVersion,
+            parakeetRuntimeActiveBackend = parakeetState.runtimeActiveBackend,
+            parakeetRuntimeActiveLanguage = parakeetState.runtimeActiveLanguage,
+            parakeetRuntimeLastError = parakeetState.runtimeLastError,
+        )
+    }
+
     val uiState: StateFlow<GemmaModelUiState> = combine(
         settingsUiState,
         _isImporting,
@@ -88,6 +149,7 @@ class GemmaModelViewModel @Inject constructor(
 
     init {
         importRepository.refresh()
+        parakeetImportRepository.refresh()
         viewModelScope.launch {
             val statuses = importRepository.modelStatuses.value
             val selectedModelId = settingsRepository.selectedModelId.value
@@ -96,6 +158,64 @@ class GemmaModelViewModel @Inject constructor(
                 val fallback = statuses.firstOrNull { it.isImported }?.spec?.id
                 settingsRepository.setSelectedModelId(fallback)
             }
+        }
+        viewModelScope.launch {
+            val statuses = parakeetImportRepository.modelStatuses.value
+            val selectedModelId = parakeetSettingsRepository.selectedModelId.value
+            val selectedStillInstalled = statuses.any { it.spec.id == selectedModelId && it.isImported }
+            if (!selectedStillInstalled) {
+                val fallback = statuses.firstOrNull { it.isImported }?.spec?.id
+                parakeetSettingsRepository.setSelectedModelId(fallback)
+            }
+        }
+    }
+
+    fun importParakeetModel(uri: Uri) {
+        viewModelScope.launch {
+            _isImporting.value = true
+            when (val result = parakeetImportRepository.importModelFromUri(uri)) {
+                is ParakeetImportResult.Success -> {
+                    parakeetSettingsRepository.setSelectedModelId(result.model.id)
+                    _message.value = "${result.model.displayName} imported successfully."
+                }
+                is ParakeetImportResult.UnsupportedFile -> {
+                    _message.value = result.message
+                }
+                is ParakeetImportResult.Failure -> {
+                    _message.value = result.message
+                }
+            }
+            _isImporting.value = false
+        }
+    }
+
+    fun selectParakeetModel(modelId: ParakeetModelId) {
+        viewModelScope.launch {
+            parakeetSettingsRepository.setSelectedModelId(modelId)
+            _message.value = "Selected Nemotron streaming ASR."
+        }
+    }
+
+    fun deleteParakeetModel(modelId: ParakeetModelId) {
+        viewModelScope.launch {
+            val deleted = parakeetImportRepository.deleteImportedModel(modelId)
+            if (deleted) {
+                val remainingImported = parakeetImportRepository.modelStatuses.value.filter { it.isImported }
+                val fallbackSelection = remainingImported.firstOrNull()?.spec?.id
+                if (parakeetSettingsRepository.selectedModelId.value == modelId) {
+                    parakeetSettingsRepository.setSelectedModelId(fallbackSelection)
+                }
+                _message.value = "Removed imported Parakeet model."
+            } else {
+                _message.value = "Failed to remove the imported Parakeet model."
+            }
+        }
+    }
+
+    fun setParakeetTranscriptionLanguage(language: ParakeetTranscriptionLanguage) {
+        viewModelScope.launch {
+            parakeetSettingsRepository.setTranscriptionLanguage(language)
+            _message.value = "Parakeet language set to ${language.displayName}."
         }
     }
 
@@ -151,4 +271,14 @@ class GemmaModelViewModel @Inject constructor(
     fun clearMessage() {
         _message.value = null
     }
+
+    private data class ParakeetSettingsUiState(
+        val models: List<ParakeetModelCardUiState>,
+        val selectedModelId: ParakeetModelId?,
+        val transcriptionLanguage: ParakeetTranscriptionLanguage,
+        val runtimeAbiVersion: Int?,
+        val runtimeActiveBackend: String?,
+        val runtimeActiveLanguage: String?,
+        val runtimeLastError: String?,
+    )
 }
