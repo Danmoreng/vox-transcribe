@@ -3,6 +3,7 @@ package com.example.voxtranscribe.data.gemma
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.example.voxtranscribe.data.ModelDownloadProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +51,7 @@ class GemmaImportRepository @Inject constructor(
     }
 
     suspend fun downloadRecommendedTextModel(
-        onProgress: (String) -> Unit,
+        onProgress: (ModelDownloadProgress) -> Unit,
     ): GemmaDownloadResult {
         return withContext(Dispatchers.IO) {
             val spec = GemmaModelCatalog.recommendedTextModel
@@ -64,10 +65,12 @@ class GemmaImportRepository @Inject constructor(
 
             val tempFile = File(targetDir, "${targetFile.name}.download")
             try {
-                onProgress("Downloading text AI model: ${spec.displayName}")
                 downloadFile(
                     url = GemmaModelCatalog.downloadUrl(spec),
                     outputFile = tempFile,
+                    title = "Text AI model",
+                    detail = spec.displayName,
+                    onProgress = onProgress,
                 )
 
                 if (targetFile.exists() && !targetFile.delete()) {
@@ -174,20 +177,67 @@ class GemmaImportRepository @Inject constructor(
         return uri.lastPathSegment?.substringAfterLast('/')
     }
 
-    private fun downloadFile(url: String, outputFile: File) {
+    private fun downloadFile(
+        url: String,
+        outputFile: File,
+        title: String,
+        detail: String,
+        onProgress: (ModelDownloadProgress) -> Unit,
+    ) {
         val connection = URL(url).openConnection().apply {
             connectTimeout = DOWNLOAD_TIMEOUT_MS
             readTimeout = DOWNLOAD_TIMEOUT_MS
             setRequestProperty("User-Agent", "VoxTranscribe")
         }
+        val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+        val startedAtNanos = System.nanoTime()
+        var lastUpdateNanos = startedAtNanos
+        var downloadedBytes = 0L
+
         connection.getInputStream().use { input ->
             FileOutputStream(outputFile).use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    downloadedBytes += read
+
+                    val now = System.nanoTime()
+                    if (now - lastUpdateNanos >= PROGRESS_UPDATE_NANOS) {
+                        onProgress(
+                            ModelDownloadProgress(
+                                title = title,
+                                detail = detail,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, now),
+                            )
+                        )
+                        lastUpdateNanos = now
+                    }
+                }
             }
         }
+        val endedAtNanos = System.nanoTime()
+        onProgress(
+            ModelDownloadProgress(
+                title = title,
+                detail = detail,
+                downloadedBytes = downloadedBytes,
+                totalBytes = totalBytes,
+                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, endedAtNanos),
+            )
+        )
+    }
+
+    private fun bytesPerSecond(bytes: Long, startedAtNanos: Long, nowNanos: Long): Double {
+        val seconds = (nowNanos - startedAtNanos).coerceAtLeast(1L) / 1_000_000_000.0
+        return bytes / seconds
     }
 
     private companion object {
         const val DOWNLOAD_TIMEOUT_MS = 60_000
+        const val PROGRESS_UPDATE_NANOS = 250_000_000L
     }
 }

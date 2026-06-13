@@ -3,6 +3,7 @@ package com.example.voxtranscribe.data.parakeet
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.example.voxtranscribe.data.ModelDownloadProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileNotFoundException
@@ -53,7 +54,7 @@ class ParakeetImportRepository @Inject constructor(
     }
 
     suspend fun downloadDefaultModel(
-        onProgress: (String) -> Unit,
+        onProgress: (ModelDownloadProgress) -> Unit,
     ): ParakeetDownloadResult {
         return withContext(Dispatchers.IO) {
             val spec = ParakeetModelCatalog.streamingModel
@@ -73,12 +74,14 @@ class ParakeetImportRepository @Inject constructor(
 
             try {
                 ParakeetModelCatalog.streamingModelFiles.forEachIndexed { index, fileName ->
-                    onProgress("Downloading speech model ${index + 1}/${ParakeetModelCatalog.streamingModelFiles.size}: $fileName")
                     val outputFile = File(tempDir, fileName)
                     outputFile.parentFile?.mkdirs()
                     downloadFile(
                         url = ParakeetModelCatalog.streamingModelDownloadUrl(fileName),
                         outputFile = outputFile,
+                        title = "Speech model",
+                        detail = "${index + 1}/${ParakeetModelCatalog.streamingModelFiles.size}: $fileName",
+                        onProgress = onProgress,
                     )
                 }
 
@@ -253,20 +256,67 @@ class ParakeetImportRepository @Inject constructor(
         return uri.lastPathSegment?.substringAfterLast('/')
     }
 
-    private fun downloadFile(url: String, outputFile: File) {
+    private fun downloadFile(
+        url: String,
+        outputFile: File,
+        title: String,
+        detail: String,
+        onProgress: (ModelDownloadProgress) -> Unit,
+    ) {
         val connection = URL(url).openConnection().apply {
             connectTimeout = DOWNLOAD_TIMEOUT_MS
             readTimeout = DOWNLOAD_TIMEOUT_MS
             setRequestProperty("User-Agent", "VoxTranscribe")
         }
+        val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+        val startedAtNanos = System.nanoTime()
+        var lastUpdateNanos = startedAtNanos
+        var downloadedBytes = 0L
+
         connection.getInputStream().use { input ->
             FileOutputStream(outputFile).use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    downloadedBytes += read
+
+                    val now = System.nanoTime()
+                    if (now - lastUpdateNanos >= PROGRESS_UPDATE_NANOS) {
+                        onProgress(
+                            ModelDownloadProgress(
+                                title = title,
+                                detail = detail,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, now),
+                            )
+                        )
+                        lastUpdateNanos = now
+                    }
+                }
             }
         }
+        val endedAtNanos = System.nanoTime()
+        onProgress(
+            ModelDownloadProgress(
+                title = title,
+                detail = detail,
+                downloadedBytes = downloadedBytes,
+                totalBytes = totalBytes,
+                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, endedAtNanos),
+            )
+        )
+    }
+
+    private fun bytesPerSecond(bytes: Long, startedAtNanos: Long, nowNanos: Long): Double {
+        val seconds = (nowNanos - startedAtNanos).coerceAtLeast(1L) / 1_000_000_000.0
+        return bytes / seconds
     }
 
     private companion object {
         const val DOWNLOAD_TIMEOUT_MS = 60_000
+        const val PROGRESS_UPDATE_NANOS = 250_000_000L
     }
 }

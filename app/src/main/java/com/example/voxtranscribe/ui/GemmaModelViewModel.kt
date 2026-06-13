@@ -3,10 +3,12 @@ package com.example.voxtranscribe.ui
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.voxtranscribe.data.ModelDownloadProgress
 import com.example.voxtranscribe.data.gemma.GemmaImportRepository
 import com.example.voxtranscribe.data.gemma.GemmaImportResult
 import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaModelId
+import com.example.voxtranscribe.data.gemma.GemmaModelCatalog
 import com.example.voxtranscribe.data.gemma.GemmaDownloadResult
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
@@ -15,6 +17,7 @@ import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetImportResult
 import com.example.voxtranscribe.data.parakeet.ParakeetImportedModelStatus
 import com.example.voxtranscribe.data.parakeet.ParakeetModelId
+import com.example.voxtranscribe.data.parakeet.ParakeetModelCatalog
 import com.example.voxtranscribe.data.parakeet.ParakeetRuntimeManager
 import com.example.voxtranscribe.data.parakeet.ParakeetSettingsRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetTranscriptionLanguage
@@ -52,9 +55,20 @@ data class GemmaModelUiState(
     val runtimeActiveBackend: String? = null,
     val runtimeFallbackReason: String? = null,
     val isImporting: Boolean = false,
-    val progressMessage: String? = null,
+    val downloadProgress: ModelDownloadProgress? = null,
     val message: String? = null,
-)
+    val speechModelDownloadSizeBytes: Long = ParakeetModelCatalog.streamingModel.downloadSizeBytes,
+    val textAiModelDownloadSizeBytes: Long = GemmaModelCatalog.recommendedTextModel.downloadSizeBytes,
+) {
+    val hasSpeechModel: Boolean
+        get() = parakeetModels.any { it.status.isImported }
+
+    val hasTextAiModel: Boolean
+        get() = models.any { it.status.isImported }
+
+    val setupComplete: Boolean
+        get() = hasSpeechModel && hasTextAiModel
+}
 
 @HiltViewModel
 class GemmaModelViewModel @Inject constructor(
@@ -67,7 +81,7 @@ class GemmaModelViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isImporting = MutableStateFlow(false)
-    private val _progressMessage = MutableStateFlow<String?>(null)
+    private val _downloadProgress = MutableStateFlow<ModelDownloadProgress?>(null)
     private val _message = MutableStateFlow<String?>(null)
 
     private val gemmaSettingsUiState = combine(
@@ -134,12 +148,12 @@ class GemmaModelViewModel @Inject constructor(
     val uiState: StateFlow<GemmaModelUiState> = combine(
         settingsUiState,
         _isImporting,
-        _progressMessage,
+        _downloadProgress,
         _message,
-    ) { baseState, isImporting, progressMessage, message ->
+    ) { baseState, isImporting, downloadProgress, message ->
         baseState.copy(
             isImporting = isImporting,
-            progressMessage = progressMessage,
+            downloadProgress = downloadProgress,
             message = message,
         )
     }.stateIn(
@@ -174,7 +188,6 @@ class GemmaModelViewModel @Inject constructor(
     fun importParakeetModel(uri: Uri) {
         viewModelScope.launch {
             _isImporting.value = true
-            _progressMessage.value = "Importing speech model..."
             when (val result = parakeetImportRepository.importModelFromUri(uri)) {
                 is ParakeetImportResult.Success -> {
                     parakeetSettingsRepository.setSelectedModelId(result.model.id)
@@ -187,7 +200,7 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
-            _progressMessage.value = null
+            _downloadProgress.value = null
             _isImporting.value = false
         }
     }
@@ -196,7 +209,7 @@ class GemmaModelViewModel @Inject constructor(
         viewModelScope.launch {
             _isImporting.value = true
             val result = parakeetImportRepository.downloadDefaultModel { progress ->
-                _progressMessage.value = progress
+                _downloadProgress.value = progress
             }
             when (result) {
                 is ParakeetDownloadResult.Success -> {
@@ -207,7 +220,7 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
-            _progressMessage.value = null
+            _downloadProgress.value = null
             _isImporting.value = false
         }
     }
@@ -251,7 +264,6 @@ class GemmaModelViewModel @Inject constructor(
     fun importModel(uri: Uri) {
         viewModelScope.launch {
             _isImporting.value = true
-            _progressMessage.value = "Importing text AI model..."
             when (val result = importRepository.importModelFromUri(uri)) {
                 is GemmaImportResult.Success -> {
                     settingsRepository.setSelectedModelId(result.model.id)
@@ -264,7 +276,7 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
-            _progressMessage.value = null
+            _downloadProgress.value = null
             _isImporting.value = false
         }
     }
@@ -273,7 +285,7 @@ class GemmaModelViewModel @Inject constructor(
         viewModelScope.launch {
             _isImporting.value = true
             val result = importRepository.downloadRecommendedTextModel { progress ->
-                _progressMessage.value = progress
+                _downloadProgress.value = progress
             }
             when (result) {
                 is GemmaDownloadResult.Success -> {
@@ -284,7 +296,7 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
-            _progressMessage.value = null
+            _downloadProgress.value = null
             _isImporting.value = false
         }
     }

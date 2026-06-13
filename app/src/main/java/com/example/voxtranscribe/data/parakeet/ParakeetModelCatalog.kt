@@ -9,6 +9,7 @@ data class ParakeetModelSpec(
     val displayName: String,
     val storageFileName: String,
     val sourceModel: String,
+    val downloadSizeBytes: Long,
     val minDeviceMemoryGb: Int,
 )
 
@@ -21,6 +22,7 @@ object ParakeetModelCatalog {
         displayName = "Nemotron 3.5 ASR Streaming 0.6B ONNX",
         storageFileName = "nemotron-onnx",
         sourceModel = streamingModelRepo,
+        downloadSizeBytes = 1_500_000_000L,
         minDeviceMemoryGb = 8,
     )
 

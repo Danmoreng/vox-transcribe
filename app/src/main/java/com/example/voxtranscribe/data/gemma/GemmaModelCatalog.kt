@@ -11,6 +11,7 @@ data class GemmaModelSpec(
     val expectedFileName: String,
     val sourceRepo: String,
     val sourceFileName: String = expectedFileName,
+    val downloadSizeBytes: Long,
     val minDeviceMemoryGb: Int,
     val supportsAudio: Boolean = true,
     val supportsText: Boolean = true,
@@ -25,6 +26,7 @@ object GemmaModelCatalog {
             displayName = "Gemma 4 E2B",
             expectedFileName = "gemma-4-E2B-it.litertlm",
             sourceRepo = "litert-community/gemma-4-E2B-it-litert-lm",
+            downloadSizeBytes = 2_600_000_000L,
             minDeviceMemoryGb = 8,
         ),
         GemmaModelSpec(
@@ -32,6 +34,7 @@ object GemmaModelCatalog {
             displayName = "Gemma 4 E4B",
             expectedFileName = "gemma-4-E4B-it.litertlm",
             sourceRepo = "litert-community/gemma-4-E4B-it-litert-lm",
+            downloadSizeBytes = 4_500_000_000L,
             minDeviceMemoryGb = 12,
         ),
     )
