@@ -35,9 +35,11 @@ fun RecordingScreen(
 ) {
     val transcription by viewModel.transcriptionState.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
+    val isPaused by viewModel.isPaused.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val engineState by viewModel.engineState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val transcriptScrollState = rememberScrollState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -70,13 +72,19 @@ fun RecordingScreen(
         permissionLauncher.launch(permissions.toTypedArray())
     }
 
+    LaunchedEffect(transcription, isListening, isPaused) {
+        if (transcription.isNotBlank() && (isListening || isPaused)) {
+            transcriptScrollState.animateScrollTo(transcriptScrollState.maxValue)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Live Recording") },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (isListening) viewModel.stopRecording()
+                        if (isListening || isPaused) viewModel.stopRecording()
                         onNavigateBack()
                     }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -94,37 +102,18 @@ fun RecordingScreen(
                 }
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (isListening) {
-                        viewModel.stopRecording()
-                    } else {
-                        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        permissionLauncher.launch(permissions.toTypedArray())
-                    }
-                },
-                containerColor = if (isListening) MaterialTheme.colorScheme.errorContainer else 
-                                 if (engineState == com.example.voxtranscribe.data.EngineState.Ready) MaterialTheme.colorScheme.primaryContainer else Color.Gray
-            ) {
-                if (engineState == com.example.voxtranscribe.data.EngineState.Loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
-                        contentDescription = if (isListening) "Stop" else "Start"
-                    )
-                }
-            }
-        },
-        floatingActionButtonPosition = FabPosition.Center
+        bottomBar = {
+            RecordingControlsBar(
+                durationSeconds = stats.durationSeconds,
+                wordCount = stats.wordCount,
+                isListening = isListening,
+                isPaused = isPaused,
+                isLoading = engineState == com.example.voxtranscribe.data.EngineState.Loading,
+                onPause = viewModel::pauseRecording,
+                onResume = viewModel::resumeRecording,
+                onStop = viewModel::stopRecording,
+            )
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -132,42 +121,7 @@ fun RecordingScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Surface(
-                tonalElevation = 2.dp,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StatItem(
-                        label = "Duration",
-                        value = "${stats.durationSeconds}s"
-                    )
-                    StatItem(
-                        label = "Words",
-                        value = "${stats.wordCount}"
-                    )
-                    if (stats.showDebugStats) {
-                        StatItem(
-                            label = "Engine",
-                            value = if (stats.isOffline) "Parakeet" else "Unknown",
-                            color = if (stats.isOffline) MaterialTheme.colorScheme.primary else Color.Gray
-                        )
-                        StatItem(
-                            label = "Speed",
-                            value = stats.speedText,
-                            color = if (stats.speedText == "n/a") Color.Gray else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
             if (stats.showDebugStats) {
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Surface(
                     tonalElevation = 1.dp,
                     shape = RoundedCornerShape(8.dp),
@@ -188,23 +142,80 @@ fun RecordingScreen(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(transcriptScrollState)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 Text(
-                    text = if (transcription.isEmpty()) "Listening..." else transcription,
+                    text = when {
+                        transcription.isNotEmpty() -> transcription
+                        isPaused -> "Paused"
+                        else -> "Listening..."
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (transcription.isEmpty()) Color.Gray else MaterialTheme.colorScheme.onSurface
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingControlsBar(
+    durationSeconds: Long,
+    wordCount: Int,
+    isListening: Boolean,
+    isPaused: Boolean,
+    isLoading: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 6.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                StatItem(label = "Time", value = "${durationSeconds}s")
+                StatItem(label = "Words", value = "$wordCount")
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(
+                    onClick = if (isPaused) onResume else onPause,
+                    enabled = !isLoading && (isListening || isPaused),
+                ) {
+                    Icon(
+                        imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (isPaused) "Resume" else "Pause",
+                    )
+                }
+                FilledIconButton(
+                    onClick = onStop,
+                    enabled = !isLoading && (isListening || isPaused),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = "Stop")
+                }
             }
         }
     }

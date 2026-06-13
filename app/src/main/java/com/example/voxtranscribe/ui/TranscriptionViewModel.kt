@@ -68,6 +68,9 @@ class TranscriptionViewModel @Inject constructor(
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
+    private val _isPaused = MutableStateFlow(false)
+    val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
     private var currentNoteId: Long? = null
     private val _accumulatedText = MutableStateFlow("")
     
@@ -144,6 +147,7 @@ class TranscriptionViewModel @Inject constructor(
         viewModelScope.launch {
             _accumulatedText.value = ""
             _durationSeconds.value = 0
+            _isPaused.value = false
             
             // 1. Create Note in DB
             val title = "Note @ ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"
@@ -165,6 +169,36 @@ class TranscriptionViewModel @Inject constructor(
         }
     }
 
+    fun pauseRecording() {
+        if (!_isListening.value || _isPaused.value) return
+        stopTimer()
+
+        val intent = Intent(context, TranscriptionService::class.java).apply {
+            action = TranscriptionService.ACTION_PAUSE
+        }
+        context.startService(intent)
+
+        _isListening.value = false
+        _isPaused.value = true
+    }
+
+    fun resumeRecording() {
+        if (!_isPaused.value) return
+
+        val intent = Intent(context, TranscriptionService::class.java).apply {
+            action = TranscriptionService.ACTION_RESUME
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+
+        startTimer()
+        _isListening.value = true
+        _isPaused.value = false
+    }
+
     fun stopRecording() {
         stopTimer()
         
@@ -175,6 +209,7 @@ class TranscriptionViewModel @Inject constructor(
         context.startService(intent)
         
         _isListening.value = false
+        _isPaused.value = false
         // Keep currentNoteId for navigation/reference if needed, but session is done
     }
 
