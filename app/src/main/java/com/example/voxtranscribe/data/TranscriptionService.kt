@@ -105,6 +105,10 @@ class TranscriptionService : LifecycleService() {
                 repository.transcriptionState.collect { entry ->
                     Log.d(TAG, "Received entry: ${entry.text}, isFinal: ${entry.isFinal}")
                     if (entry.isFinal) {
+                        if (finalizedTranscriptParts.any { it.trim() == entry.text.trim() }) {
+                            Log.d(TAG, "Skipping duplicate final segment for note $noteId")
+                            return@collect
+                        }
                         finalizedTranscriptParts += entry.text
                         try {
                             // Prevent cancellation during save
@@ -129,12 +133,39 @@ class TranscriptionService : LifecycleService() {
             Log.d(TAG, "Calling stopListening...")
             updateNotification("Finalizing note...")
             repository.stopListening()
+            persistVisibleTranscriptFallback()
             generateTitleForActiveNote()
             segmentCollectorJob?.cancel()
             segmentCollectorJob = null
             Log.d(TAG, "stopListening returned. Stopping service.")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+        }
+    }
+
+    private suspend fun persistVisibleTranscriptFallback() {
+        val noteId = activeNoteId ?: return
+        if (finalizedTranscriptParts.isNotEmpty()) {
+            return
+        }
+
+        val text = repository.partialText.value.trim()
+        if (text.isBlank()) {
+            Log.w(TAG, "No finalized or visible transcript available for note $noteId")
+            return
+        }
+        if (finalizedTranscriptParts.any { it.trim() == text }) {
+            return
+        }
+
+        try {
+            withContext(NonCancellable) {
+                notesRepository.insertSegment(noteId, text, true)
+            }
+            finalizedTranscriptParts += text
+            Log.d(TAG, "Saved visible transcript fallback to DB for note $noteId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save visible transcript fallback", e)
         }
     }
 

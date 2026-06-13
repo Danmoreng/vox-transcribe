@@ -59,6 +59,13 @@ class ParakeetTranscriptionRepository @Inject constructor(
                 settingsRepository.selectedModelId,
                 importRepository.modelStatuses,
             ) { selectedModelId, statuses ->
+                if (selectedModelId == null) {
+                    statuses.firstOrNull { it.isImported }?.spec?.id?.let { fallbackModelId ->
+                        scope.launch {
+                            settingsRepository.setSelectedModelId(fallbackModelId)
+                        }
+                    }
+                }
                 statuses.any { it.spec.id == selectedModelId && it.isImported }
             }.collect { modelReady ->
                 if (!isListening.get()) {
@@ -76,7 +83,7 @@ class ParakeetTranscriptionRepository @Inject constructor(
         if (!isModelReady()) {
             isListening.set(false)
             _engineState.value = EngineState.Uninitialized
-            _partialText.value = "Import and select the Nemotron streaming GGUF before recording."
+            _partialText.value = "Import and select the Nemotron ONNX model before recording."
             return
         }
 
@@ -112,10 +119,9 @@ class ParakeetTranscriptionRepository @Inject constructor(
                         processingMillis = processingMillis,
                     )
 
-                    val visibleText = sanitizeTranscript(result.text)
-                    if (visibleText.isNotBlank()) {
-                        pendingUtterance = appendWithSpacing(pendingUtterance, visibleText)
-                        _partialText.value = pendingUtterance
+                    if (shouldAppendStreamingText(result.text)) {
+                        pendingUtterance = appendStreamingText(pendingUtterance, result.text)
+                        publishPendingUtterance()
                     }
 
                     if (result.isEndOfUtterance) {
@@ -142,9 +148,9 @@ class ParakeetTranscriptionRepository @Inject constructor(
 
         try {
             val tail = runtimeManager.finalizeStream()
-            val visibleTail = sanitizeTranscript(tail)
-            if (visibleTail.isNotBlank()) {
-                pendingUtterance = appendWithSpacing(pendingUtterance, visibleTail)
+            if (shouldAppendStreamingText(tail)) {
+                pendingUtterance = appendStreamingText(pendingUtterance, tail)
+                publishPendingUtterance()
             }
             emitPendingUtterance()
         } catch (e: Exception) {
@@ -158,7 +164,6 @@ class ParakeetTranscriptionRepository @Inject constructor(
         if (_engineState.value != EngineState.Error) {
             _engineState.value = if (isModelReady()) EngineState.Ready else EngineState.Uninitialized
         }
-        _partialText.value = ""
         updateDebugState(status = "Idle")
     }
 
@@ -188,10 +193,9 @@ class ParakeetTranscriptionRepository @Inject constructor(
     }
 
     private suspend fun emitPendingUtterance() {
-        val text = pendingUtterance.trim()
+        val text = sanitizeTranscript(pendingUtterance)
         if (text.isBlank()) {
             pendingUtterance = ""
-            _partialText.value = ""
             return
         }
 
@@ -203,19 +207,23 @@ class ParakeetTranscriptionRepository @Inject constructor(
             )
         )
         pendingUtterance = ""
-        _partialText.value = ""
     }
 
-    private fun appendWithSpacing(existing: String, next: String): String {
-        val trimmedNext = next.trim()
-        if (trimmedNext.isBlank()) {
+    private fun publishPendingUtterance() {
+        val text = sanitizeTranscript(pendingUtterance)
+        if (text.isNotBlank()) {
+            _partialText.value = text
+        }
+    }
+
+    private fun appendStreamingText(existing: String, next: String): String {
+        if (next.isBlank()) {
             return existing
         }
-        val trimmedExisting = existing.trim()
-        return if (trimmedExisting.isBlank()) {
-            trimmedNext
+        return if (existing.isBlank()) {
+            next
         } else {
-            "$trimmedExisting $trimmedNext"
+            existing + next
         }
     }
 
@@ -230,18 +238,26 @@ class ParakeetTranscriptionRepository @Inject constructor(
     }
 
     private fun sanitizeTranscript(text: String): String {
-        val withoutSpecialTokens = text
+        return cleanTranscriptText(text)
+    }
+
+    private fun shouldAppendStreamingText(text: String): Boolean {
+        val cleaned = cleanTranscriptText(text)
+        if (cleaned.isBlank()) return false
+        if (looksLikeDecoderLoop(cleaned)) {
+            Log.w(TAG, "Discarding repetitive decoder chunk")
+            return false
+        }
+        return true
+    }
+
+    private fun cleanTranscriptText(text: String): String {
+        return text
             .replace(LOCALE_TOKEN_REGEX, " ")
             .replace(SPECIAL_TOKEN_REGEX, " ")
+            .replace(SPACE_BEFORE_PUNCTUATION_REGEX, "$1")
             .replace(WHITESPACE_REGEX, " ")
             .trim()
-
-        if (withoutSpecialTokens.isBlank()) return ""
-        if (looksLikeDecoderLoop(withoutSpecialTokens)) {
-            Log.w(TAG, "Discarding repetitive decoder output")
-            return ""
-        }
-        return withoutSpecialTokens
     }
 
     private fun looksLikeDecoderLoop(text: String): Boolean {
@@ -313,6 +329,7 @@ class ParakeetTranscriptionRepository @Inject constructor(
         const val MIN_CAPTURE_RMS = 0.000_01
         val LOCALE_TOKEN_REGEX = Regex("<[a-z]{2}(?:-[A-Z]{2})?>")
         val SPECIAL_TOKEN_REGEX = Regex("<(?:EOU|EOB|blank|pad|unk)>", RegexOption.IGNORE_CASE)
+        val SPACE_BEFORE_PUNCTUATION_REGEX = Regex("\\s+([.,!?;:])")
         val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

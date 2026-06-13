@@ -41,7 +41,6 @@ data class GemmaModelUiState(
     val parakeetModels: List<ParakeetModelCardUiState> = emptyList(),
     val selectedParakeetModelId: ParakeetModelId? = null,
     val parakeetTranscriptionLanguage: ParakeetTranscriptionLanguage = ParakeetTranscriptionLanguage.AUTO,
-    val parakeetRuntimeAbiVersion: Int? = null,
     val parakeetRuntimeActiveBackend: String? = null,
     val parakeetRuntimeActiveLanguage: String? = null,
     val parakeetRuntimeLastError: String? = null,
@@ -110,7 +109,6 @@ class GemmaModelViewModel @Inject constructor(
             },
             selectedModelId = resolvedSelectedModelId,
             transcriptionLanguage = transcriptionLanguage,
-            runtimeAbiVersion = runtimeStatus.abiVersion,
             runtimeActiveBackend = runtimeStatus.activeBackend,
             runtimeActiveLanguage = runtimeStatus.activeLanguage,
             runtimeLastError = runtimeStatus.lastError,
@@ -125,7 +123,6 @@ class GemmaModelViewModel @Inject constructor(
             parakeetModels = parakeetState.models,
             selectedParakeetModelId = parakeetState.selectedModelId,
             parakeetTranscriptionLanguage = parakeetState.transcriptionLanguage,
-            parakeetRuntimeAbiVersion = parakeetState.runtimeAbiVersion,
             parakeetRuntimeActiveBackend = parakeetState.runtimeActiveBackend,
             parakeetRuntimeActiveLanguage = parakeetState.runtimeActiveLanguage,
             parakeetRuntimeLastError = parakeetState.runtimeLastError,
@@ -205,9 +202,9 @@ class GemmaModelViewModel @Inject constructor(
                 if (parakeetSettingsRepository.selectedModelId.value == modelId) {
                     parakeetSettingsRepository.setSelectedModelId(fallbackSelection)
                 }
-                _message.value = "Removed imported Parakeet model."
+                _message.value = "Removed imported Nemotron ONNX model."
             } else {
-                _message.value = "Failed to remove the imported Parakeet model."
+                _message.value = "Failed to remove the imported Nemotron ONNX model."
             }
         }
     }
@@ -215,7 +212,7 @@ class GemmaModelViewModel @Inject constructor(
     fun setParakeetTranscriptionLanguage(language: ParakeetTranscriptionLanguage) {
         viewModelScope.launch {
             parakeetSettingsRepository.setTranscriptionLanguage(language)
-            _message.value = "Parakeet language set to ${language.displayName}."
+            _message.value = "Nemotron language set to ${language.displayName}."
         }
     }
 
@@ -276,7 +273,6 @@ class GemmaModelViewModel @Inject constructor(
         val models: List<ParakeetModelCardUiState>,
         val selectedModelId: ParakeetModelId?,
         val transcriptionLanguage: ParakeetTranscriptionLanguage,
-        val runtimeAbiVersion: Int?,
         val runtimeActiveBackend: String?,
         val runtimeActiveLanguage: String?,
         val runtimeLastError: String?,

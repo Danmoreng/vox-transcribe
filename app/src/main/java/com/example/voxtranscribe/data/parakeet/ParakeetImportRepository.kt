@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,7 @@ class ParakeetImportRepository @Inject constructor(
 
             if (!ParakeetModelCatalog.isSupportedImportFile(sourceFileName)) {
                 return@withContext ParakeetImportResult.UnsupportedFile(
-                    "Select the GGUF file for ${ParakeetModelCatalog.streamingModel.sourceModel}."
+                    "Select a ZIP export of ${ParakeetModelCatalog.streamingModel.sourceModel}."
                 )
             }
 
@@ -65,37 +66,42 @@ class ParakeetImportRepository @Inject constructor(
                 return@withContext ParakeetImportResult.Failure("Could not create the model directory.")
             }
 
-            val tempFile = File(targetDir, "${targetFile.name}.tmp")
+            val tempDir = File(targetDir, "${targetFile.name}.tmp")
 
             try {
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
+                    unzipModel(input = ZipInputStream(input), targetDir = tempDir)
                 } ?: return@withContext ParakeetImportResult.Failure("Could not open the selected file.")
 
-                if (targetFile.exists() && !targetFile.delete()) {
+                if (!File(tempDir, "genai_config.json").isFile) {
+                    tempDir.deleteRecursively()
+                    return@withContext ParakeetImportResult.Failure(
+                        "The ZIP must contain genai_config.json at its top level."
+                    )
+                }
+
+                if (targetFile.exists() && !targetFile.deleteRecursively()) {
                     return@withContext ParakeetImportResult.Failure("Could not replace the existing imported model.")
                 }
 
-                if (!tempFile.renameTo(targetFile)) {
+                if (!tempDir.renameTo(targetFile)) {
                     return@withContext ParakeetImportResult.Failure("Could not finalize the imported model file.")
                 }
 
                 refresh()
                 ParakeetImportResult.Success(spec)
             } catch (e: FileNotFoundException) {
-                tempFile.delete()
+                tempDir.deleteRecursively()
                 ParakeetImportResult.Failure(
                     "Android could not read the selected file. Choose it through the system file picker."
                 )
             } catch (e: SecurityException) {
-                tempFile.delete()
+                tempDir.deleteRecursively()
                 ParakeetImportResult.Failure(
                     "Android did not grant access to the selected file. Select it again in the system file picker."
                 )
             } catch (e: IOException) {
-                tempFile.delete()
+                tempDir.deleteRecursively()
                 ParakeetImportResult.Failure(
                     "Could not copy the model into private app storage: ${e.message ?: "I/O error"}"
                 )
@@ -108,7 +114,7 @@ class ParakeetImportRepository @Inject constructor(
             val spec = ParakeetModelCatalog.supportedModels.firstOrNull { it.id == modelId }
                 ?: return@withContext false
             val deleted = getModelFile(spec).let { file ->
-                !file.exists() || file.delete()
+                !file.exists() || file.deleteRecursively()
             }
             if (deleted) {
                 refresh()
@@ -123,8 +129,8 @@ class ParakeetImportRepository @Inject constructor(
             ParakeetImportedModelStatus(
                 spec = spec,
                 file = file,
-                isImported = file.exists(),
-                fileSizeBytes = if (file.exists()) file.length() else 0L,
+                isImported = File(file, "genai_config.json").isFile,
+                fileSizeBytes = if (file.exists()) file.totalSizeBytes() else 0L,
             )
         }
     }
@@ -134,7 +140,50 @@ class ParakeetImportRepository @Inject constructor(
     }
 
     private fun getModelDirectory(): File {
-        return File(context.filesDir, "parakeet")
+        return context.filesDir
+    }
+
+    private fun unzipModel(input: ZipInputStream, targetDir: File) {
+        targetDir.deleteRecursively()
+        if (!targetDir.mkdirs()) {
+            throw IOException("Could not create temporary model directory.")
+        }
+
+        input.use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val relativeName = entry.name
+                    .replace('\\', '/')
+                    .trimStart('/')
+                    .removePrefix("${ParakeetModelCatalog.streamingModel.storageFileName}/")
+                    .removePrefix("nemotron-3.5-asr-streaming-0.6b-onnx-int4/")
+                if (relativeName.isNotBlank()) {
+                    val output = File(targetDir, relativeName)
+                    val canonicalTarget = targetDir.canonicalFile
+                    val canonicalOutput = output.canonicalFile
+                    if (!canonicalOutput.path.startsWith(canonicalTarget.path)) {
+                        throw IOException("ZIP contains an unsafe path: ${entry.name}")
+                    }
+                    if (entry.isDirectory) {
+                        output.mkdirs()
+                    } else {
+                        output.parentFile?.mkdirs()
+                        FileOutputStream(output).use { fileOutput ->
+                            zip.copyTo(fileOutput)
+                        }
+                    }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+    }
+
+    private fun File.totalSizeBytes(): Long {
+        if (isFile) return length()
+        return walkTopDown()
+            .filter { it.isFile }
+            .sumOf { it.length() }
     }
 
     private fun getDisplayName(uri: Uri): String? {

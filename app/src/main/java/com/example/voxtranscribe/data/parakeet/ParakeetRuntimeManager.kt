@@ -1,6 +1,7 @@
 package com.example.voxtranscribe.data.parakeet
 
 import android.util.Log
+import com.example.voxtranscribe.data.nemotron.NemotronNative
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +11,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 data class ParakeetRuntimeStatus(
-    val abiVersion: Int? = null,
     val activeBackend: String? = null,
     val activeLanguage: String? = null,
     val activeModelPath: String? = null,
@@ -42,18 +42,16 @@ class ParakeetRuntimeManager @Inject constructor(
             closeStreamLocked()
 
             val language = settingsRepository.transcriptionLanguage.value
-            val handle = ParakeetNative.beginStream(modelHandle, language.targetLang)
+            val handle = NemotronNative.beginStream(modelHandle, language.nemotronLanguageId)
             if (handle == 0L) {
-                val error = lastNativeErrorLocked().ifBlank {
-                    "The selected model did not start a streaming session."
-                }
+                val error = "The selected Nemotron ONNX model did not start a streaming session."
                 _runtimeStatus.value = _runtimeStatus.value.copy(lastError = error)
                 throw IllegalStateException(error)
             }
 
             streamHandle = handle
             _runtimeStatus.value = _runtimeStatus.value.copy(
-                activeBackend = ParakeetNative.activeBackendName(),
+                activeBackend = "ort-cpu",
                 activeLanguage = language.targetLang,
                 lastError = null,
             )
@@ -65,15 +63,9 @@ class ParakeetRuntimeManager @Inject constructor(
             val handle = streamHandle
             check(handle != 0L) { "Parakeet stream is not active." }
 
-            val text = ParakeetNative.feedStream(handle, samples)
-            if (text == null) {
-                val error = lastNativeErrorLocked().ifBlank { "Parakeet stream feed failed." }
-                _runtimeStatus.value = _runtimeStatus.value.copy(lastError = error)
-                throw IllegalStateException(error)
-            }
             ParakeetStreamResult(
-                text = text,
-                isEndOfUtterance = ParakeetNative.lastFeedHadEou(handle),
+                text = NemotronNative.feedStream(handle, samples),
+                isEndOfUtterance = false,
             )
         }
     }
@@ -85,13 +77,8 @@ class ParakeetRuntimeManager @Inject constructor(
                 return@withLock ""
             }
 
-            val text = ParakeetNative.finalizeStream(handle)
+            val text = NemotronNative.finalizeStream(handle)
             closeStreamLocked()
-            if (text == null) {
-                val error = lastNativeErrorLocked().ifBlank { "Parakeet stream finalization failed." }
-                _runtimeStatus.value = _runtimeStatus.value.copy(lastError = error)
-                throw IllegalStateException(error)
-            }
             text
         }
     }
@@ -105,9 +92,9 @@ class ParakeetRuntimeManager @Inject constructor(
 
     private fun ensureModelLoaded() {
         val selectedModelId = settingsRepository.selectedModelId.value
-            ?: throw IllegalStateException("Import and select the Nemotron streaming GGUF before recording.")
+            ?: throw IllegalStateException("Import and select the Nemotron ONNX ZIP before recording.")
         val modelPath = importRepository.getImportedModelPath(selectedModelId)
-            ?: throw IllegalStateException("The selected Parakeet model is not imported.")
+            ?: throw IllegalStateException("The selected Nemotron ONNX model is not imported.")
 
         if (
             modelHandle != 0L &&
@@ -120,52 +107,43 @@ class ParakeetRuntimeManager @Inject constructor(
         closeStreamLocked()
         closeModelLocked()
 
-        val threadCount = Runtime.getRuntime().availableProcessors().coerceIn(2, MAX_CPU_THREADS)
-        ParakeetNative.setThreadCount(threadCount)
-        val handle = ParakeetNative.loadModel(modelPath)
+        val handle = NemotronNative.loadModel(modelPath)
         if (handle == 0L) {
-            throw IllegalStateException("Failed to load the selected Parakeet GGUF.")
+            throw IllegalStateException("Failed to load the selected Nemotron ONNX model.")
         }
 
         modelHandle = handle
         loadedModelId = selectedModelId
         loadedModelPath = modelPath
         _runtimeStatus.value = ParakeetRuntimeStatus(
-            abiVersion = ParakeetNative.abiVersion(),
-            activeBackend = "loading",
+            activeBackend = "ort-cpu",
             activeLanguage = settingsRepository.transcriptionLanguage.value.targetLang,
             activeModelPath = modelPath,
             lastError = null,
         )
         Log.i(
             TAG,
-            "Loaded Parakeet model from $modelPath with backend " +
-                "${ParakeetNative.activeBackendName()} and $threadCount CPU fallback threads",
+            "Loaded Nemotron ONNX model from $modelPath with ONNX Runtime GenAI CPU backend",
         )
     }
 
     private fun closeStreamLocked() {
         if (streamHandle != 0L) {
-            ParakeetNative.freeStream(streamHandle)
+            NemotronNative.freeStream(streamHandle)
             streamHandle = 0L
         }
     }
 
     private fun closeModelLocked() {
         if (modelHandle != 0L) {
-            ParakeetNative.freeModel(modelHandle)
+            NemotronNative.freeModel(modelHandle)
             modelHandle = 0L
         }
         loadedModelId = null
         loadedModelPath = null
     }
 
-    private fun lastNativeErrorLocked(): String {
-        return if (modelHandle == 0L) "" else ParakeetNative.lastError(modelHandle)
-    }
-
     private companion object {
         const val TAG = "ParakeetRuntime"
-        const val MAX_CPU_THREADS = 6
     }
 }

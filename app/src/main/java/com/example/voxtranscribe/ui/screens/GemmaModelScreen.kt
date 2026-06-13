@@ -108,7 +108,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Import the GGUF file for nvidia/nemotron-3.5-asr-streaming-0.6b. The app runs it through parakeet.cpp and prefers the Vulkan GPU backend, with CPU fallback for unsupported operations.",
+                text = "Import a ZIP of onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4. The app runs it through ONNX Runtime GenAI, which is fast enough for realtime CPU streaming on the S25.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -145,26 +145,25 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "The Parakeet build targets arm64-v8a and prefers Vulkan GPU acceleration. The runtime status below shows the backend selected on this device.",
+                text = "The Nemotron build targets arm64-v8a and currently uses ONNX Runtime GenAI CPU execution. QNN/GPU can be explored later without blocking realtime use.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.height(12.dp))
             ParakeetRuntimeStatusCard(
-                abiVersion = uiState.parakeetRuntimeAbiVersion,
                 activeBackend = uiState.parakeetRuntimeActiveBackend,
                 activeLanguage = uiState.parakeetRuntimeActiveLanguage,
                 lastError = uiState.parakeetRuntimeLastError,
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { parakeetLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                onClick = { parakeetLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                 enabled = !uiState.isImporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.padding(4.dp))
-                Text("Import Nemotron .gguf Model File")
+                Text("Import Nemotron ONNX .zip")
             }
 
             if (uiState.isImporting) {
@@ -256,7 +255,6 @@ fun GemmaModelScreen(
 
 @Composable
 private fun ParakeetRuntimeStatusCard(
-    abiVersion: Int?,
     activeBackend: String?,
     activeLanguage: String?,
     lastError: String?,
@@ -272,12 +270,8 @@ private fun ParakeetRuntimeStatusCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             RuntimeStatusRow(
-                label = "Native ABI",
-                value = abiVersion?.toString() ?: "Not loaded yet",
-            )
-            RuntimeStatusRow(
                 label = "Active Backend",
-                value = activeBackend?.uppercase() ?: "CPU",
+                value = activeBackend?.uppercase() ?: "ORT CPU",
             )
             RuntimeStatusRow(
                 label = "Language",
