@@ -7,8 +7,10 @@ import com.example.voxtranscribe.data.gemma.GemmaImportRepository
 import com.example.voxtranscribe.data.gemma.GemmaImportResult
 import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaModelId
+import com.example.voxtranscribe.data.gemma.GemmaDownloadResult
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
+import com.example.voxtranscribe.data.parakeet.ParakeetDownloadResult
 import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetImportResult
 import com.example.voxtranscribe.data.parakeet.ParakeetImportedModelStatus
@@ -50,6 +52,7 @@ data class GemmaModelUiState(
     val runtimeActiveBackend: String? = null,
     val runtimeFallbackReason: String? = null,
     val isImporting: Boolean = false,
+    val progressMessage: String? = null,
     val message: String? = null,
 )
 
@@ -64,6 +67,7 @@ class GemmaModelViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isImporting = MutableStateFlow(false)
+    private val _progressMessage = MutableStateFlow<String?>(null)
     private val _message = MutableStateFlow<String?>(null)
 
     private val gemmaSettingsUiState = combine(
@@ -130,10 +134,12 @@ class GemmaModelViewModel @Inject constructor(
     val uiState: StateFlow<GemmaModelUiState> = combine(
         settingsUiState,
         _isImporting,
+        _progressMessage,
         _message,
-    ) { baseState, isImporting, message ->
+    ) { baseState, isImporting, progressMessage, message ->
         baseState.copy(
             isImporting = isImporting,
+            progressMessage = progressMessage,
             message = message,
         )
     }.stateIn(
@@ -168,6 +174,7 @@ class GemmaModelViewModel @Inject constructor(
     fun importParakeetModel(uri: Uri) {
         viewModelScope.launch {
             _isImporting.value = true
+            _progressMessage.value = "Importing speech model..."
             when (val result = parakeetImportRepository.importModelFromUri(uri)) {
                 is ParakeetImportResult.Success -> {
                     parakeetSettingsRepository.setSelectedModelId(result.model.id)
@@ -180,6 +187,27 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
+            _progressMessage.value = null
+            _isImporting.value = false
+        }
+    }
+
+    fun downloadParakeetModel() {
+        viewModelScope.launch {
+            _isImporting.value = true
+            val result = parakeetImportRepository.downloadDefaultModel { progress ->
+                _progressMessage.value = progress
+            }
+            when (result) {
+                is ParakeetDownloadResult.Success -> {
+                    parakeetSettingsRepository.setSelectedModelId(result.model.id)
+                    _message.value = "${result.model.displayName} downloaded successfully."
+                }
+                is ParakeetDownloadResult.Failure -> {
+                    _message.value = result.message
+                }
+            }
+            _progressMessage.value = null
             _isImporting.value = false
         }
     }
@@ -223,6 +251,7 @@ class GemmaModelViewModel @Inject constructor(
     fun importModel(uri: Uri) {
         viewModelScope.launch {
             _isImporting.value = true
+            _progressMessage.value = "Importing text AI model..."
             when (val result = importRepository.importModelFromUri(uri)) {
                 is GemmaImportResult.Success -> {
                     settingsRepository.setSelectedModelId(result.model.id)
@@ -235,6 +264,27 @@ class GemmaModelViewModel @Inject constructor(
                     _message.value = result.message
                 }
             }
+            _progressMessage.value = null
+            _isImporting.value = false
+        }
+    }
+
+    fun downloadRecommendedTextAiModel() {
+        viewModelScope.launch {
+            _isImporting.value = true
+            val result = importRepository.downloadRecommendedTextModel { progress ->
+                _progressMessage.value = progress
+            }
+            when (result) {
+                is GemmaDownloadResult.Success -> {
+                    settingsRepository.setSelectedModelId(result.model.id)
+                    _message.value = "${result.model.displayName} downloaded successfully."
+                }
+                is GemmaDownloadResult.Failure -> {
+                    _message.value = result.message
+                }
+            }
+            _progressMessage.value = null
             _isImporting.value = false
         }
     }

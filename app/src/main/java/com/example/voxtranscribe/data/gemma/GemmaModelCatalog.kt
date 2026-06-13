@@ -9,6 +9,8 @@ data class GemmaModelSpec(
     val id: GemmaModelId,
     val displayName: String,
     val expectedFileName: String,
+    val sourceRepo: String,
+    val sourceFileName: String = expectedFileName,
     val minDeviceMemoryGb: Int,
     val supportsAudio: Boolean = true,
     val supportsText: Boolean = true,
@@ -22,15 +24,23 @@ object GemmaModelCatalog {
             id = GemmaModelId.GEMMA_4_E2B,
             displayName = "Gemma 4 E2B",
             expectedFileName = "gemma-4-E2B-it.litertlm",
+            sourceRepo = "litert-community/gemma-4-E2B-it-litert-lm",
             minDeviceMemoryGb = 8,
         ),
         GemmaModelSpec(
             id = GemmaModelId.GEMMA_4_E4B,
             displayName = "Gemma 4 E4B",
             expectedFileName = "gemma-4-E4B-it.litertlm",
+            sourceRepo = "litert-community/gemma-4-E4B-it-litert-lm",
             minDeviceMemoryGb = 12,
         ),
     )
+
+    val recommendedTextModel: GemmaModelSpec = supportedModels.first { it.id == GemmaModelId.GEMMA_4_E2B }
+
+    fun downloadUrl(spec: GemmaModelSpec): String {
+        return "https://huggingface.co/${spec.sourceRepo}/resolve/main/${spec.sourceFileName}?download=true"
+    }
 
     fun findSupportedModelForImport(fileName: String): GemmaModelSpec? {
         val normalizedFileName = fileName.trim().lowercase()

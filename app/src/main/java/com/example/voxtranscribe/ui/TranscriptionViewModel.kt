@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.TranscriptionService
 import com.example.voxtranscribe.data.db.Note
+import com.example.voxtranscribe.data.gemma.GemmaImportRepository
+import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetSettingsRepository
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,16 +34,36 @@ data class TranscriptionStats(
     val showDebugStats: Boolean = false,
 )
 
+data class SetupStatus(
+    val hasSpeechModel: Boolean = false,
+    val hasTextAiModel: Boolean = false,
+) {
+    val needsSetup: Boolean
+        get() = !hasSpeechModel || !hasTextAiModel
+}
+
 @HiltViewModel
 class TranscriptionViewModel @Inject constructor(
     private val speechRepository: TranscriptionRepository,
     private val notesRepository: NotesRepository,
+    private val parakeetImportRepository: ParakeetImportRepository,
+    private val gemmaImportRepository: GemmaImportRepository,
     private val parakeetSettingsRepository: ParakeetSettingsRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     val allNotes: StateFlow<List<Note>> = notesRepository.getAllNotes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val setupStatus: StateFlow<SetupStatus> = combine(
+        parakeetImportRepository.modelStatuses,
+        gemmaImportRepository.modelStatuses,
+    ) { speechModels, textAiModels ->
+        SetupStatus(
+            hasSpeechModel = speechModels.any { it.isImported },
+            hasTextAiModel = textAiModels.any { it.isImported },
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SetupStatus())
 
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
@@ -69,6 +91,9 @@ class TranscriptionViewModel @Inject constructor(
     val engineState = speechRepository.engineState
 
     init {
+        parakeetImportRepository.refresh()
+        gemmaImportRepository.refresh()
+
         // Collect finalized segments for UI display ONLY
         // Persistence is handled by TranscriptionService to ensure reliability even if UI is closed
         viewModelScope.launch {

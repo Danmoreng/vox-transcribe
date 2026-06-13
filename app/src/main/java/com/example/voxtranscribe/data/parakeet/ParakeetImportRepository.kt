@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
+import java.net.URL
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +31,11 @@ sealed interface ParakeetImportResult {
     data class Failure(val message: String) : ParakeetImportResult
 }
 
+sealed interface ParakeetDownloadResult {
+    data class Success(val model: ParakeetModelSpec) : ParakeetDownloadResult
+    data class Failure(val message: String) : ParakeetDownloadResult
+}
+
 @Singleton
 class ParakeetImportRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -44,6 +50,57 @@ class ParakeetImportRepository @Inject constructor(
 
     fun refresh() {
         _modelStatuses.value = readModelStatuses()
+    }
+
+    suspend fun downloadDefaultModel(
+        onProgress: (String) -> Unit,
+    ): ParakeetDownloadResult {
+        return withContext(Dispatchers.IO) {
+            val spec = ParakeetModelCatalog.streamingModel
+            val targetFile = getModelFile(spec)
+            val targetDir = targetFile.parentFile
+                ?: return@withContext ParakeetDownloadResult.Failure("Could not prepare model storage.")
+
+            if (!targetDir.exists() && !targetDir.mkdirs()) {
+                return@withContext ParakeetDownloadResult.Failure("Could not create the model directory.")
+            }
+
+            val tempDir = File(targetDir, "${targetFile.name}.download")
+            tempDir.deleteRecursively()
+            if (!tempDir.mkdirs()) {
+                return@withContext ParakeetDownloadResult.Failure("Could not create a temporary download directory.")
+            }
+
+            try {
+                ParakeetModelCatalog.streamingModelFiles.forEachIndexed { index, fileName ->
+                    onProgress("Downloading speech model ${index + 1}/${ParakeetModelCatalog.streamingModelFiles.size}: $fileName")
+                    val outputFile = File(tempDir, fileName)
+                    outputFile.parentFile?.mkdirs()
+                    downloadFile(
+                        url = ParakeetModelCatalog.streamingModelDownloadUrl(fileName),
+                        outputFile = outputFile,
+                    )
+                }
+
+                if (!File(tempDir, "genai_config.json").isFile) {
+                    return@withContext ParakeetDownloadResult.Failure("Downloaded model is incomplete.")
+                }
+
+                if (targetFile.exists() && !targetFile.deleteRecursively()) {
+                    return@withContext ParakeetDownloadResult.Failure("Could not replace the existing speech model.")
+                }
+
+                if (!tempDir.renameTo(targetFile)) {
+                    return@withContext ParakeetDownloadResult.Failure("Could not finalize the downloaded speech model.")
+                }
+
+                refresh()
+                ParakeetDownloadResult.Success(spec)
+            } catch (e: Exception) {
+                tempDir.deleteRecursively()
+                ParakeetDownloadResult.Failure(e.message ?: "Speech model download failed.")
+            }
+        }
     }
 
     suspend fun importModelFromUri(uri: Uri): ParakeetImportResult {
@@ -194,5 +251,22 @@ class ParakeetImportRepository @Inject constructor(
             }
         }
         return uri.lastPathSegment?.substringAfterLast('/')
+    }
+
+    private fun downloadFile(url: String, outputFile: File) {
+        val connection = URL(url).openConnection().apply {
+            connectTimeout = DOWNLOAD_TIMEOUT_MS
+            readTimeout = DOWNLOAD_TIMEOUT_MS
+            setRequestProperty("User-Agent", "VoxTranscribe")
+        }
+        connection.getInputStream().use { input ->
+            FileOutputStream(outputFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+
+    private companion object {
+        const val DOWNLOAD_TIMEOUT_MS = 60_000
     }
 }

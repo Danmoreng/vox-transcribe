@@ -108,7 +108,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Import a ZIP of onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4. The app runs it through ONNX Runtime GenAI, which is fast enough for realtime CPU streaming on the S25.",
+                text = "Download the public Nemotron ONNX ASR model from Hugging Face. Manual ZIP import remains available as a fallback.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -190,22 +190,38 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { parakeetLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                onClick = viewModel::downloadParakeetModel,
                 enabled = !uiState.isImporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.padding(4.dp))
-                Text("Import Nemotron ONNX .zip")
+                Text("Download Speech Model")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { parakeetLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                enabled = !uiState.isImporting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Manual ZIP Import")
             }
 
             if (uiState.isImporting) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Box(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     CircularProgressIndicator()
+                    uiState.progressMessage?.let { progress ->
+                        Text(
+                            text = progress,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -226,7 +242,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Gemma remains available for title generation and AI note features. Download one of the supported Gemma 4 LiteRT-LM files externally, then import it here.",
+                text = "Download Gemma 4 E2B for transcript cleanup, automatic titles and summaries. Manual .litertlm import remains available as a fallback.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -244,13 +260,21 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { gemmaLauncher.launch("*/*") },
+                onClick = viewModel::downloadRecommendedTextAiModel,
                 enabled = !uiState.isImporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Default.Download, contentDescription = null)
                 Spacer(modifier = Modifier.padding(4.dp))
-                Text("Import Gemma .litertlm Model File")
+                Text("Download Text AI Model")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { gemmaLauncher.launch("*/*") },
+                enabled = !uiState.isImporting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Manual .litertlm Import")
             }
 
             Spacer(modifier = Modifier.height(24.dp))
