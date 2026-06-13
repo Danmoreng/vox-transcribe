@@ -5,7 +5,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -82,9 +84,21 @@ class ParakeetImportRepository @Inject constructor(
 
                 refresh()
                 ParakeetImportResult.Success(spec)
-            } catch (e: Exception) {
+            } catch (e: FileNotFoundException) {
                 tempFile.delete()
-                ParakeetImportResult.Failure(e.message ?: "Import failed.")
+                ParakeetImportResult.Failure(
+                    "Android could not read the selected file. Choose it through the system file picker."
+                )
+            } catch (e: SecurityException) {
+                tempFile.delete()
+                ParakeetImportResult.Failure(
+                    "Android did not grant access to the selected file. Select it again in the system file picker."
+                )
+            } catch (e: IOException) {
+                tempFile.delete()
+                ParakeetImportResult.Failure(
+                    "Could not copy the model into private app storage: ${e.message ?: "I/O error"}"
+                )
             }
         }
     }
@@ -120,7 +134,7 @@ class ParakeetImportRepository @Inject constructor(
     }
 
     private fun getModelDirectory(): File {
-        return File(context.getExternalFilesDir(null), "parakeet")
+        return File(context.filesDir, "parakeet")
     }
 
     private fun getDisplayName(uri: Uri): String? {

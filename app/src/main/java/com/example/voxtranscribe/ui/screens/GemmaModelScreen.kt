@@ -70,7 +70,7 @@ fun GemmaModelScreen(
     }
 
     val parakeetLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let(viewModel::importParakeetModel)
     }
@@ -108,7 +108,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Import the GGUF file for nvidia/nemotron-3.5-asr-streaming-0.6b. The app runs it through parakeet.cpp on CPU first; GPU support can be enabled later through the same native bridge.",
+                text = "Import the GGUF file for nvidia/nemotron-3.5-asr-streaming-0.6b. The app runs it through parakeet.cpp and prefers the Vulkan GPU backend, with CPU fallback for unsupported operations.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -145,7 +145,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "The current Parakeet build targets arm64-v8a and runs on CPU. Vulkan scaffolding is present, but disabled until shader generation is reliable on the Android build.",
+                text = "The Parakeet build targets arm64-v8a and prefers Vulkan GPU acceleration. The runtime status below shows the backend selected on this device.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -158,7 +158,7 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { parakeetLauncher.launch("*/*") },
+                onClick = { parakeetLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
                 enabled = !uiState.isImporting,
                 modifier = Modifier.fillMaxWidth(),
             ) {

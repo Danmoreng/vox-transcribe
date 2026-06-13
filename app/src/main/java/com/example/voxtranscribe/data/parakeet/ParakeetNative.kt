@@ -6,6 +6,7 @@ internal object ParakeetNative {
     }
 
     external fun abiVersion(): Int
+    external fun configureBackend(deviceName: String)
     external fun setThreadCount(threadCount: Int)
     external fun activeBackendName(): String
     external fun loadModel(modelPath: String): Long

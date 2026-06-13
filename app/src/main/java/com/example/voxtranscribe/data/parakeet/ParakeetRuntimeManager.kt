@@ -137,7 +137,11 @@ class ParakeetRuntimeManager @Inject constructor(
             activeModelPath = modelPath,
             lastError = null,
         )
-        Log.i(TAG, "Loaded Parakeet model from $modelPath using $threadCount CPU threads")
+        Log.i(
+            TAG,
+            "Loaded Parakeet model from $modelPath with backend " +
+                "${ParakeetNative.activeBackendName()} and $threadCount CPU fallback threads",
+        )
     }
 
     private fun closeStreamLocked() {

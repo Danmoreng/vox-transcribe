@@ -91,10 +91,19 @@ class ParakeetTranscriptionRepository @Inject constructor(
             try {
                 runtimeManager.beginStream()
                 _engineState.value = EngineState.Ready
-                updateDebugState(status = "Streaming", queuedClips = 0, droppedClips = 0)
+                updateDebugState(status = "Starting microphone", queuedClips = 0, droppedClips = 0)
 
-                audioRecorder.startRecording()
+                check(audioRecorder.startRecording()) {
+                    "Microphone capture could not start. Check the microphone permission and privacy toggle."
+                }
+                updateDebugState(status = "Waiting for speech")
+
                 audioRecorder.audioFlow.collect { floatChunk ->
+                    if (!containsCapturedAudio(floatChunk)) {
+                        updateDebugState(status = "Microphone muted")
+                        return@collect
+                    }
+
                     val startedAtNanos = System.nanoTime()
                     val result = runtimeManager.feed(floatChunk)
                     val processingMillis = nanosToMillis(System.nanoTime() - startedAtNanos)
@@ -103,8 +112,9 @@ class ParakeetTranscriptionRepository @Inject constructor(
                         processingMillis = processingMillis,
                     )
 
-                    if (result.text.isNotBlank()) {
-                        pendingUtterance = appendWithSpacing(pendingUtterance, result.text)
+                    val visibleText = sanitizeTranscript(result.text)
+                    if (visibleText.isNotBlank()) {
+                        pendingUtterance = appendWithSpacing(pendingUtterance, visibleText)
                         _partialText.value = pendingUtterance
                     }
 
@@ -132,8 +142,9 @@ class ParakeetTranscriptionRepository @Inject constructor(
 
         try {
             val tail = runtimeManager.finalizeStream()
-            if (tail.isNotBlank()) {
-                pendingUtterance = appendWithSpacing(pendingUtterance, tail)
+            val visibleTail = sanitizeTranscript(tail)
+            if (visibleTail.isNotBlank()) {
+                pendingUtterance = appendWithSpacing(pendingUtterance, visibleTail)
             }
             emitPendingUtterance()
         } catch (e: Exception) {
@@ -208,6 +219,44 @@ class ParakeetTranscriptionRepository @Inject constructor(
         }
     }
 
+    private fun containsCapturedAudio(samples: FloatArray): Boolean {
+        if (samples.isEmpty()) return false
+        var energy = 0.0
+        for (sample in samples) {
+            energy += sample * sample
+        }
+        val rms = kotlin.math.sqrt(energy / samples.size)
+        return rms >= MIN_CAPTURE_RMS
+    }
+
+    private fun sanitizeTranscript(text: String): String {
+        val withoutSpecialTokens = text
+            .replace(LOCALE_TOKEN_REGEX, " ")
+            .replace(SPECIAL_TOKEN_REGEX, " ")
+            .replace(WHITESPACE_REGEX, " ")
+            .trim()
+
+        if (withoutSpecialTokens.isBlank()) return ""
+        if (looksLikeDecoderLoop(withoutSpecialTokens)) {
+            Log.w(TAG, "Discarding repetitive decoder output")
+            return ""
+        }
+        return withoutSpecialTokens
+    }
+
+    private fun looksLikeDecoderLoop(text: String): Boolean {
+        val compact = text.filterNot(Char::isWhitespace)
+        if (compact.length < 24) return false
+        val distinctRatio = compact.toSet().size.toDouble() / compact.length
+        if (distinctRatio < 0.12) return true
+
+        return (1..8).any { unitLength ->
+            if (compact.length < unitLength * 6) return@any false
+            val unit = compact.take(unitLength)
+            compact.chunked(unitLength).take(6).all { it == unit }
+        }
+    }
+
     private fun recordProcessingMetrics(
         chunkDurationSeconds: Double,
         processingMillis: Long,
@@ -259,5 +308,11 @@ class ParakeetTranscriptionRepository @Inject constructor(
     private companion object {
         const val TAG = "ParakeetTranscription"
         const val SAMPLE_RATE = 16_000
+        // Android's AppOps silencing produces digital zeroes. Keep natural
+        // pauses so the streaming model can still detect end-of-utterance.
+        const val MIN_CAPTURE_RMS = 0.000_01
+        val LOCALE_TOKEN_REGEX = Regex("<[a-z]{2}(?:-[A-Z]{2})?>")
+        val SPECIAL_TOKEN_REGEX = Regex("<(?:EOU|EOB|blank|pad|unk)>", RegexOption.IGNORE_CASE)
+        val WHITESPACE_REGEX = Regex("\\s+")
     }
 }

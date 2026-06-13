@@ -1,6 +1,7 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 #include "backend.hpp"
@@ -41,10 +42,33 @@ VoxParakeetStream* as_stream(jlong handle) {
 
 } // namespace
 
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM*, void*) {
+    // Adreno can fail to link ggml's specialized small-column mat-vec shader
+    // and return a null pipeline. Keep the encoder on the stable general
+    // matmul path; numerically sensitive decoder graphs use persistent CPU.
+    setenv("VOX_VK_DISABLE_MATVEC", "1", 0);
+    setenv("GGML_VK_DISABLE_COOPMAT", "1", 0);
+    setenv("GGML_VK_DISABLE_COOPMAT2", "1", 0);
+    setenv("GGML_VK_DISABLE_FUSION", "1", 0);
+    return JNI_VERSION_1_6;
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_voxtranscribe_data_parakeet_ParakeetNative_abiVersion(
     JNIEnv*, jobject) {
     return parakeet_capi_abi_version();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_voxtranscribe_data_parakeet_ParakeetNative_configureBackend(
+    JNIEnv* env, jobject, jstring device_name) {
+    const std::string device = jstring_to_string(env, device_name);
+    pk::shutdown_backend();
+    if (device.empty()) {
+        unsetenv("PARAKEET_DEVICE");
+    } else {
+        setenv("PARAKEET_DEVICE", device.c_str(), 1);
+    }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -127,7 +151,7 @@ Java_com_example_voxtranscribe_data_parakeet_ParakeetNative_feedStream(
         &eou);
     env->ReleaseFloatArrayElements(samples, sample_data, JNI_ABORT);
 
-    wrapper->last_eou = eou;
+    wrapper->last_eou = (eou & PARAKEET_EVENT_EOU) != 0;
     if (!text) {
         return nullptr;
     }
