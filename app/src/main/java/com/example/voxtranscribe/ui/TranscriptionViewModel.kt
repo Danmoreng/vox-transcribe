@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.voxtranscribe.data.NotesRepository
 import com.example.voxtranscribe.data.TranscriptionService
 import com.example.voxtranscribe.data.db.Note
+import com.example.voxtranscribe.data.parakeet.ParakeetSettingsRepository
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,12 +29,14 @@ data class TranscriptionStats(
     val speedText: String = "n/a",
     val queuedClips: Int = 0,
     val droppedClips: Int = 0,
+    val showDebugStats: Boolean = false,
 )
 
 @HiltViewModel
 class TranscriptionViewModel @Inject constructor(
     private val speechRepository: TranscriptionRepository,
     private val notesRepository: NotesRepository,
+    private val parakeetSettingsRepository: ParakeetSettingsRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -86,7 +89,8 @@ class TranscriptionViewModel @Inject constructor(
         _durationSeconds,
         transcriptionState,
         speechRepository.debugState,
-    ) { isOffline, duration, text, debug ->
+        parakeetSettingsRepository.showDebugStats,
+    ) { isOffline, duration, text, debug, showDebugStats ->
         val words = text.split(Regex("\\s+")).filter { it.isNotBlank() }.size
         val realtimeFactorText = debug.averageRealtimeFactor
             ?.let { String.format(Locale.US, "%.2f", it) }
@@ -103,6 +107,7 @@ class TranscriptionViewModel @Inject constructor(
             speedText = speedText,
             queuedClips = debug.queuedClips,
             droppedClips = debug.droppedClips,
+            showDebugStats = showDebugStats,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TranscriptionStats())
 

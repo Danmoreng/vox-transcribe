@@ -132,7 +132,6 @@ fun RecordingScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Stats Bar
             Surface(
                 tonalElevation = 2.dp,
                 shape = RoundedCornerShape(8.dp),
@@ -144,11 +143,6 @@ fun RecordingScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     StatItem(
-                        label = "Engine",
-                        value = if (stats.isOffline) "Parakeet" else "Unknown",
-                        color = if (stats.isOffline) MaterialTheme.colorScheme.primary else Color.Gray
-                    )
-                    StatItem(
                         label = "Duration",
                         value = "${stats.durationSeconds}s"
                     )
@@ -156,34 +150,43 @@ fun RecordingScreen(
                         label = "Words",
                         value = "${stats.wordCount}"
                     )
-                    StatItem(
-                        label = "Speed",
-                        value = stats.speedText,
-                        color = if (stats.speedText == "n/a") Color.Gray else MaterialTheme.colorScheme.primary
-                    )
+                    if (stats.showDebugStats) {
+                        StatItem(
+                            label = "Engine",
+                            value = if (stats.isOffline) "Parakeet" else "Unknown",
+                            color = if (stats.isOffline) MaterialTheme.colorScheme.primary else Color.Gray
+                        )
+                        StatItem(
+                            label = "Speed",
+                            value = stats.speedText,
+                            color = if (stats.speedText == "n/a") Color.Gray else MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (stats.showDebugStats) {
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Surface(
-                tonalElevation = 1.dp,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    tonalElevation = 1.dp,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    StatItem(label = "Status", value = stats.debugStatus)
-                    StatItem(label = "RTF", value = stats.realtimeFactorText)
-                    StatItem(label = "Queue", value = "${stats.queuedClips}")
-                    StatItem(
-                        label = "Dropped",
-                        value = "${stats.droppedClips}",
-                        color = if (stats.droppedClips > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StatItem(label = "Status", value = stats.debugStatus)
+                        StatItem(label = "RTF", value = stats.realtimeFactorText)
+                        StatItem(label = "Queue", value = "${stats.queuedClips}")
+                        StatItem(
+                            label = "Dropped",
+                            value = "${stats.droppedClips}",
+                            color = if (stats.droppedClips > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
 

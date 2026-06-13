@@ -22,6 +22,9 @@ class ParakeetSettingsRepository @Inject constructor(
     private val _transcriptionLanguage = MutableStateFlow(readTranscriptionLanguage())
     val transcriptionLanguage: StateFlow<ParakeetTranscriptionLanguage> = _transcriptionLanguage.asStateFlow()
 
+    private val _showDebugStats = MutableStateFlow(readShowDebugStats())
+    val showDebugStats: StateFlow<Boolean> = _showDebugStats.asStateFlow()
+
     suspend fun setSelectedModelId(modelId: ParakeetModelId?) {
         withContext(Dispatchers.IO) {
             prefs.edit()
@@ -40,6 +43,15 @@ class ParakeetSettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setShowDebugStats(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            prefs.edit()
+                .putBoolean(KEY_SHOW_DEBUG_STATS, enabled)
+                .apply()
+            _showDebugStats.value = enabled
+        }
+    }
+
     private fun readSelectedModelId(): ParakeetModelId? {
         val storedValue = prefs.getString(KEY_SELECTED_MODEL_ID, null) ?: return null
         return ParakeetModelId.entries.firstOrNull { it.name == storedValue }
@@ -52,9 +64,14 @@ class ParakeetSettingsRepository @Inject constructor(
             ?: ParakeetTranscriptionLanguage.AUTO
     }
 
+    private fun readShowDebugStats(): Boolean {
+        return prefs.getBoolean(KEY_SHOW_DEBUG_STATS, false)
+    }
+
     private companion object {
         const val PREFS_NAME = "parakeet_settings"
         const val KEY_SELECTED_MODEL_ID = "selected_model_id"
         const val KEY_TRANSCRIPTION_LANGUAGE = "transcription_language"
+        const val KEY_SHOW_DEBUG_STATS = "show_debug_stats"
     }
 }

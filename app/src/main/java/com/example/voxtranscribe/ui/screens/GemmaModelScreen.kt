@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -49,7 +50,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.ui.GemmaModelCardUiState
 import com.example.voxtranscribe.ui.GemmaModelViewModel
 import com.example.voxtranscribe.ui.ParakeetModelCardUiState
-import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
 import com.example.voxtranscribe.data.parakeet.ParakeetTranscriptionLanguage
 import java.text.DecimalFormat
 
@@ -138,6 +138,39 @@ fun GemmaModelScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Show recording debug stats",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Shows backend, speed, RTF, queue and dropped chunks on the recording screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = uiState.showDebugStats,
+                        onCheckedChange = viewModel::setShowDebugStats,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = "Runtime",
                 style = MaterialTheme.typography.titleMedium,
@@ -199,25 +232,6 @@ fun GemmaModelScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Gemma Audio Language",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                GemmaTranscriptionLanguage.entries.forEach { language ->
-                    FilterChip(
-                        selected = uiState.transcriptionLanguage == language,
-                        onClick = { viewModel.setTranscriptionLanguage(language) },
-                        label = { Text(language.displayName) },
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
                 text = "Gemma Runtime",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -226,7 +240,6 @@ fun GemmaModelScreen(
             RuntimeStatusCard(
                 gpuDelegateAvailable = uiState.runtimeGpuDelegateAvailable,
                 activeBackend = uiState.runtimeActiveBackend,
-                audioBackend = uiState.runtimeAudioBackend,
                 fallbackReason = uiState.runtimeFallbackReason,
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -293,7 +306,6 @@ private fun ParakeetRuntimeStatusCard(
 private fun RuntimeStatusCard(
     gpuDelegateAvailable: Boolean?,
     activeBackend: String?,
-    audioBackend: String?,
     fallbackReason: String?,
 ) {
     Card(
@@ -317,10 +329,6 @@ private fun RuntimeStatusCard(
             RuntimeStatusRow(
                 label = "Active Backend",
                 value = activeBackend?.uppercase() ?: "Not initialized yet",
-            )
-            RuntimeStatusRow(
-                label = "Audio Backend",
-                value = audioBackend?.uppercase() ?: "Disabled",
             )
             if (!fallbackReason.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(4.dp))

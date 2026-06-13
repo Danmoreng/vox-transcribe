@@ -9,7 +9,6 @@ import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaModelId
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
-import com.example.voxtranscribe.data.gemma.GemmaTranscriptionLanguage
 import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetImportResult
 import com.example.voxtranscribe.data.parakeet.ParakeetImportedModelStatus
@@ -41,15 +40,14 @@ data class GemmaModelUiState(
     val parakeetModels: List<ParakeetModelCardUiState> = emptyList(),
     val selectedParakeetModelId: ParakeetModelId? = null,
     val parakeetTranscriptionLanguage: ParakeetTranscriptionLanguage = ParakeetTranscriptionLanguage.AUTO,
+    val showDebugStats: Boolean = false,
     val parakeetRuntimeActiveBackend: String? = null,
     val parakeetRuntimeActiveLanguage: String? = null,
     val parakeetRuntimeLastError: String? = null,
     val models: List<GemmaModelCardUiState> = emptyList(),
     val selectedModelId: GemmaModelId? = null,
-    val transcriptionLanguage: GemmaTranscriptionLanguage = GemmaTranscriptionLanguage.AUTO,
     val runtimeGpuDelegateAvailable: Boolean? = null,
     val runtimeActiveBackend: String? = null,
-    val runtimeAudioBackend: String? = null,
     val runtimeFallbackReason: String? = null,
     val isImporting: Boolean = false,
     val message: String? = null,
@@ -71,9 +69,8 @@ class GemmaModelViewModel @Inject constructor(
     private val gemmaSettingsUiState = combine(
         importRepository.modelStatuses,
         settingsRepository.selectedModelId,
-        settingsRepository.transcriptionLanguage,
         runtimeManager.runtimeStatus,
-    ) { statuses, selectedModelId, transcriptionLanguage, runtimeStatus ->
+    ) { statuses, selectedModelId, runtimeStatus ->
         val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
         val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
         GemmaModelUiState(
@@ -84,10 +81,8 @@ class GemmaModelViewModel @Inject constructor(
                 )
             },
             selectedModelId = resolvedSelectedModelId,
-            transcriptionLanguage = transcriptionLanguage,
             runtimeGpuDelegateAvailable = runtimeStatus.gpuDelegateAvailable,
             runtimeActiveBackend = runtimeStatus.activeBackend,
-            runtimeAudioBackend = runtimeStatus.audioBackend,
             runtimeFallbackReason = runtimeStatus.fallbackReason,
         )
     }
@@ -96,8 +91,9 @@ class GemmaModelViewModel @Inject constructor(
         parakeetImportRepository.modelStatuses,
         parakeetSettingsRepository.selectedModelId,
         parakeetSettingsRepository.transcriptionLanguage,
+        parakeetSettingsRepository.showDebugStats,
         parakeetRuntimeManager.runtimeStatus,
-    ) { statuses, selectedModelId, transcriptionLanguage, runtimeStatus ->
+    ) { statuses, selectedModelId, transcriptionLanguage, showDebugStats, runtimeStatus ->
         val installedModelIds = statuses.filter { it.isImported }.map { it.spec.id }.toSet()
         val resolvedSelectedModelId = selectedModelId?.takeIf { installedModelIds.contains(it) }
         ParakeetSettingsUiState(
@@ -109,6 +105,7 @@ class GemmaModelViewModel @Inject constructor(
             },
             selectedModelId = resolvedSelectedModelId,
             transcriptionLanguage = transcriptionLanguage,
+            showDebugStats = showDebugStats,
             runtimeActiveBackend = runtimeStatus.activeBackend,
             runtimeActiveLanguage = runtimeStatus.activeLanguage,
             runtimeLastError = runtimeStatus.lastError,
@@ -123,6 +120,7 @@ class GemmaModelViewModel @Inject constructor(
             parakeetModels = parakeetState.models,
             selectedParakeetModelId = parakeetState.selectedModelId,
             parakeetTranscriptionLanguage = parakeetState.transcriptionLanguage,
+            showDebugStats = parakeetState.showDebugStats,
             parakeetRuntimeActiveBackend = parakeetState.runtimeActiveBackend,
             parakeetRuntimeActiveLanguage = parakeetState.runtimeActiveLanguage,
             parakeetRuntimeLastError = parakeetState.runtimeLastError,
@@ -216,6 +214,12 @@ class GemmaModelViewModel @Inject constructor(
         }
     }
 
+    fun setShowDebugStats(enabled: Boolean) {
+        viewModelScope.launch {
+            parakeetSettingsRepository.setShowDebugStats(enabled)
+        }
+    }
+
     fun importModel(uri: Uri) {
         viewModelScope.launch {
             _isImporting.value = true
@@ -258,13 +262,6 @@ class GemmaModelViewModel @Inject constructor(
         }
     }
 
-    fun setTranscriptionLanguage(language: GemmaTranscriptionLanguage) {
-        viewModelScope.launch {
-            settingsRepository.setTranscriptionLanguage(language)
-            _message.value = "Transcription language set to ${language.displayName}."
-        }
-    }
-
     fun clearMessage() {
         _message.value = null
     }
@@ -273,6 +270,7 @@ class GemmaModelViewModel @Inject constructor(
         val models: List<ParakeetModelCardUiState>,
         val selectedModelId: ParakeetModelId?,
         val transcriptionLanguage: ParakeetTranscriptionLanguage,
+        val showDebugStats: Boolean,
         val runtimeActiveBackend: String?,
         val runtimeActiveLanguage: String?,
         val runtimeLastError: String?,
