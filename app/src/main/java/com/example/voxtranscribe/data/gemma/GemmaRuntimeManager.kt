@@ -38,7 +38,6 @@ class GemmaRuntimeManager @Inject constructor(
     private var loadedModelId: GemmaModelId? = null
     private var loadedModelPath: String? = null
     private var loadedContextTokens: Int? = null
-    private var loadedAudioEnabled = false
     private var engine: Engine? = null
     private var gpuAvailabilityChecked = false
     private var gpuDelegateAvailable = false
@@ -57,50 +56,11 @@ class GemmaRuntimeManager @Inject constructor(
                 modelId = selectedModelId,
                 modelPath = modelPath,
                 requiredContextTokens = requiredContextTokens,
-                enableAudio = false,
             )
 
             val conversation = createConversation()
             try {
                 runConversation(conversation, listOf(Content.Text(prompt)))
-            } finally {
-                conversation.close()
-            }
-        }
-    }
-
-    suspend fun transcribeAudioClip(
-        audioBytes: ByteArray,
-        previousTranscriptTail: String?,
-        requestedGenerationTokens: Int = DEFAULT_AUDIO_GENERATION_TOKENS,
-    ): String {
-        return mutex.withLock {
-            val selectedModelId = settingsRepository.selectedModelId.value
-                ?: throw IllegalStateException("No Gemma model is selected.")
-            val modelPath = importRepository.getImportedModelPath(selectedModelId)
-                ?: throw IllegalStateException("The selected Gemma model is not imported.")
-            val requiredContextTokens = requiredContextTokens(requestedGenerationTokens)
-            val transcriptionLanguage = settingsRepository.transcriptionLanguage.value
-
-            ensureEngineLoaded(
-                modelId = selectedModelId,
-                modelPath = modelPath,
-                requiredContextTokens = requiredContextTokens,
-                enableAudio = true,
-            )
-
-            val conversation = createConversation(
-                audioMode = true,
-                systemInstruction = buildAudioSystemInstruction(transcriptionLanguage),
-            )
-            try {
-                runConversation(
-                    conversation = conversation,
-                    contents = listOf(
-                        Content.AudioBytes(audioBytes),
-                        Content.Text(buildAudioUserPrompt(previousTranscriptTail)),
-                    ),
-                )
             } finally {
                 conversation.close()
             }
@@ -117,14 +77,12 @@ class GemmaRuntimeManager @Inject constructor(
         modelId: GemmaModelId,
         modelPath: String,
         requiredContextTokens: Int,
-        enableAudio: Boolean,
     ) {
         if (
             engine != null &&
             loadedModelId == modelId &&
             loadedModelPath == modelPath &&
-            (loadedContextTokens ?: 0) >= requiredContextTokens &&
-            (loadedAudioEnabled || !enableAudio)
+            (loadedContextTokens ?: 0) >= requiredContextTokens
         ) {
             return
         }
@@ -143,7 +101,6 @@ class GemmaRuntimeManager @Inject constructor(
                     EngineConfig(
                         modelPath = modelPath,
                         backend = backend,
-                        audioBackend = if (enableAudio) Backend.CPU() else null,
                         maxNumTokens = requiredContextTokens,
                     )
                 )
@@ -153,10 +110,8 @@ class GemmaRuntimeManager @Inject constructor(
                 loadedModelId = modelId
                 loadedModelPath = modelPath
                 loadedContextTokens = requiredContextTokens
-                loadedAudioEnabled = enableAudio
                 _runtimeStatus.value = _runtimeStatus.value.copy(
                     activeBackend = backend.label(),
-                    audioBackend = if (enableAudio) Backend.CPU().label() else null,
                     fallbackReason = fallbackReason,
                 )
                 return
@@ -172,7 +127,6 @@ class GemmaRuntimeManager @Inject constructor(
 
         _runtimeStatus.value = _runtimeStatus.value.copy(
             activeBackend = null,
-            audioBackend = if (enableAudio) Backend.CPU().label() else null,
             fallbackReason = buildFallbackReason(lastError),
         )
         throw IllegalStateException(
@@ -207,30 +161,16 @@ class GemmaRuntimeManager @Inject constructor(
         return gpuDelegateAvailable
     }
 
-    private fun createConversation(
-        audioMode: Boolean = false,
-        systemInstruction: String? = null,
-    ): Conversation {
+    private fun createConversation(): Conversation {
         val currentEngine = engine ?: throw IllegalStateException("Gemma engine is not initialized.")
-        val samplerConfig = if (audioMode) {
-            SamplerConfig(
-                topK = 1,
-                topP = 1.0,
-                temperature = 0.0,
-            )
-        } else {
-            SamplerConfig(
-                topK = 64,
-                topP = 0.95,
-                temperature = 0.7,
-            )
-        }
+        val samplerConfig = SamplerConfig(
+            topK = 64,
+            topP = 0.95,
+            temperature = 0.7,
+        )
         return currentEngine.createConversation(
             ConversationConfig(
                 samplerConfig = samplerConfig,
-                systemInstruction = systemInstruction
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { Contents.of(Content.Text(it)) },
             )
         )
     }
@@ -273,37 +213,13 @@ class GemmaRuntimeManager @Inject constructor(
         loadedModelId = null
         loadedModelPath = null
         loadedContextTokens = null
-        loadedAudioEnabled = false
         _runtimeStatus.value = _runtimeStatus.value.copy(
             activeBackend = null,
-            audioBackend = null,
         )
     }
 
     private fun requiredContextTokens(requestedGenerationTokens: Int): Int {
         return max(MIN_CONTEXT_TOKENS, requestedGenerationTokens + CONTEXT_HEADROOM_TOKENS)
-    }
-
-    private fun buildAudioUserPrompt(previousTranscriptTail: String?): String {
-        val tail = previousTranscriptTail?.trim().orEmpty()
-        return if (tail.isBlank()) {
-            AUDIO_USER_PROMPT_NO_CONTEXT
-        } else {
-            AUDIO_USER_PROMPT_WITH_CONTEXT_TEMPLATE.format(tail)
-        }
-    }
-
-    private fun buildAudioSystemInstruction(
-        language: GemmaTranscriptionLanguage,
-    ): String {
-        val languageLabel = language.promptLabel
-        return if (languageLabel == null) {
-            DEFAULT_AUDIO_SYSTEM_INSTRUCTION
-        } else {
-            "Transcribe only the spoken audio. The spoken language is $languageLabel. " +
-                "Return only the spoken words in $languageLabel. Do not translate. " +
-                "Do not explain. Do not answer the speaker. Do not repeat instructions or prior context."
-        }
     }
 
     private fun buildFallbackReason(throwable: Throwable?): String? {
@@ -317,17 +233,8 @@ class GemmaRuntimeManager @Inject constructor(
     companion object {
         private const val TAG = "GemmaRuntimeManager"
         private const val DEFAULT_GENERATION_TOKENS = 1024
-        private const val DEFAULT_AUDIO_GENERATION_TOKENS = 256
         private const val MIN_CONTEXT_TOKENS = 2048
         private const val CONTEXT_HEADROOM_TOKENS = 512
-        private const val DEFAULT_AUDIO_SYSTEM_INSTRUCTION =
-            "Transcribe only the spoken audio. Preserve the original language. " +
-                "Return only the spoken words. Do not translate. Do not explain. Do not answer the speaker. " +
-                "Do not repeat instructions or prior context."
-        private const val AUDIO_USER_PROMPT_NO_CONTEXT =
-            "Return only the transcript for this audio clip."
-        private const val AUDIO_USER_PROMPT_WITH_CONTEXT_TEMPLATE =
-            "Continue after this confirmed context and do not repeat it:%n%s%nReturn only the new transcript for this audio clip."
     }
 }
 

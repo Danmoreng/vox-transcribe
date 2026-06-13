@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,7 +31,48 @@ fun HomeScreen(
     viewModel: TranscriptionViewModel = hiltViewModel()
 ) {
     val notes by viewModel.allNotes.collectAsStateWithLifecycle()
+    val setupStatus by viewModel.setupStatus.collectAsStateWithLifecycle()
     var noteToDelete by remember { mutableStateOf<Note?>(null) }
+    var setupDismissed by rememberSaveable { mutableStateOf(false) }
+
+    if (setupStatus.needsSetup && !setupDismissed) {
+        AlertDialog(
+            onDismissRequest = { setupDismissed = true },
+            title = { Text("Set up Vox Transcribe") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Vox needs one speech model for recording. The text AI model is optional, but enables automatic titles, transcript cleanup and summaries."
+                    )
+                    SetupStep(
+                        title = "Speech model",
+                        status = if (setupStatus.hasSpeechModel) "Installed" else "Required",
+                        isReady = setupStatus.hasSpeechModel,
+                    )
+                    SetupStep(
+                        title = "Text AI model",
+                        status = if (setupStatus.hasTextAiModel) "Installed" else "Optional",
+                        isReady = setupStatus.hasTextAiModel,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        setupDismissed = true
+                        onNavigateToModelSettings()
+                    }
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { setupDismissed = true }) {
+                    Text("Later")
+                }
+            }
+        )
+    }
 
     if (noteToDelete != null) {
         val note = noteToDelete!!
@@ -70,9 +112,15 @@ fun HomeScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onNavigateToRecord,
+                onClick = {
+                    if (setupStatus.hasSpeechModel) {
+                        onNavigateToRecord()
+                    } else {
+                        onNavigateToModelSettings()
+                    }
+                },
                 icon = { Icon(Icons.Default.Mic, contentDescription = null) },
-                text = { Text("New Recording") }
+                text = { Text(if (setupStatus.hasSpeechModel) "New Recording" else "Set Up") }
             )
         }
     ) { padding ->
@@ -97,6 +145,41 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SetupStep(
+    title: String,
+    status: String,
+    isReady: Boolean,
+) {
+    Surface(
+        color = if (isReady) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        } else {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        },
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(
+                status,
+                color = if (isReady) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
     }
 }

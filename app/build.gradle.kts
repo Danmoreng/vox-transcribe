@@ -17,6 +17,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -36,6 +39,17 @@ android {
         compose = true
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.setSrcDirs(listOf("../models/onnxruntime-genai-android-0.14.0/jni"))
+        }
+    }
 }
 
 dependencies {
@@ -60,6 +74,7 @@ dependencies {
     implementation(libs.tflite.play.services)
     implementation(libs.tflite.play.services.gpu)
     implementation(libs.tflite.play.services.support)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.1")
 
     // Hilt
     implementation(libs.hilt.android)

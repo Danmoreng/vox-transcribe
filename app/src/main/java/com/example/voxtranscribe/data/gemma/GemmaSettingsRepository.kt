@@ -21,9 +21,6 @@ class GemmaSettingsRepository @Inject constructor(
     private val _selectedModelId = MutableStateFlow(readSelectedModelId())
     val selectedModelId: StateFlow<GemmaModelId?> = _selectedModelId.asStateFlow()
 
-    private val _transcriptionLanguage = MutableStateFlow(readTranscriptionLanguage())
-    val transcriptionLanguage: StateFlow<GemmaTranscriptionLanguage> = _transcriptionLanguage.asStateFlow()
-
     private val _aiOutputLanguage = MutableStateFlow(readAiOutputLanguage())
     val aiOutputLanguage: StateFlow<AiOutputLanguage> = _aiOutputLanguage.asStateFlow()
 
@@ -42,15 +39,6 @@ class GemmaSettingsRepository @Inject constructor(
                 .putString(KEY_SELECTED_MODEL_ID, modelId?.name)
                 .apply()
             _selectedModelId.value = modelId
-        }
-    }
-
-    suspend fun setTranscriptionLanguage(language: GemmaTranscriptionLanguage) {
-        withContext(Dispatchers.IO) {
-            prefs.edit()
-                .putString(KEY_TRANSCRIPTION_LANGUAGE, language.name)
-                .apply()
-            _transcriptionLanguage.value = language
         }
     }
 
@@ -77,13 +65,6 @@ class GemmaSettingsRepository @Inject constructor(
         return GemmaModelId.entries.firstOrNull { it.name == storedValue }
     }
 
-    private fun readTranscriptionLanguage(): GemmaTranscriptionLanguage {
-        val storedValue = prefs.getString(KEY_TRANSCRIPTION_LANGUAGE, null)
-            ?: return GemmaTranscriptionLanguage.AUTO
-        return GemmaTranscriptionLanguage.entries.firstOrNull { it.name == storedValue }
-            ?: GemmaTranscriptionLanguage.AUTO
-    }
-
     private fun readAiOutputLanguage(): AiOutputLanguage {
         val storedValue = prefs.getString(KEY_AI_OUTPUT_LANGUAGE, null)
             ?: return AiOutputLanguage.MATCH_TRANSCRIPT
@@ -101,7 +82,6 @@ class GemmaSettingsRepository @Inject constructor(
     private companion object {
         const val PREFS_NAME = "gemma_settings"
         const val KEY_SELECTED_MODEL_ID = "selected_model_id"
-        const val KEY_TRANSCRIPTION_LANGUAGE = "transcription_language"
         const val KEY_AI_OUTPUT_LANGUAGE = "ai_output_language"
         const val KEY_AI_SUMMARY_STYLE = "ai_summary_style"
     }

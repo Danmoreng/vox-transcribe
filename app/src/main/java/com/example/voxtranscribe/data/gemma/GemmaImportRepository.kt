@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,6 +28,11 @@ sealed interface GemmaImportResult {
     data class Failure(val message: String) : GemmaImportResult
 }
 
+sealed interface GemmaDownloadResult {
+    data class Success(val model: GemmaModelSpec) : GemmaDownloadResult
+    data class Failure(val message: String) : GemmaDownloadResult
+}
+
 @Singleton
 class GemmaImportRepository @Inject constructor(
     @ApplicationContext private val context: Context
@@ -41,6 +47,44 @@ class GemmaImportRepository @Inject constructor(
 
     fun refresh() {
         _modelStatuses.value = readModelStatuses()
+    }
+
+    suspend fun downloadRecommendedTextModel(
+        onProgress: (String) -> Unit,
+    ): GemmaDownloadResult {
+        return withContext(Dispatchers.IO) {
+            val spec = GemmaModelCatalog.recommendedTextModel
+            val targetFile = getModelFile(spec)
+            val targetDir = targetFile.parentFile
+                ?: return@withContext GemmaDownloadResult.Failure("Could not prepare model storage.")
+
+            if (!targetDir.exists() && !targetDir.mkdirs()) {
+                return@withContext GemmaDownloadResult.Failure("Could not create the model directory.")
+            }
+
+            val tempFile = File(targetDir, "${targetFile.name}.download")
+            try {
+                onProgress("Downloading text AI model: ${spec.displayName}")
+                downloadFile(
+                    url = GemmaModelCatalog.downloadUrl(spec),
+                    outputFile = tempFile,
+                )
+
+                if (targetFile.exists() && !targetFile.delete()) {
+                    return@withContext GemmaDownloadResult.Failure("Could not replace the existing text AI model.")
+                }
+
+                if (!tempFile.renameTo(targetFile)) {
+                    return@withContext GemmaDownloadResult.Failure("Could not finalize the downloaded text AI model.")
+                }
+
+                refresh()
+                GemmaDownloadResult.Success(spec)
+            } catch (e: Exception) {
+                tempFile.delete()
+                GemmaDownloadResult.Failure(e.message ?: "Text AI model download failed.")
+            }
+        }
     }
 
     suspend fun importModelFromUri(uri: Uri): GemmaImportResult {
@@ -128,5 +172,22 @@ class GemmaImportRepository @Inject constructor(
             }
         }
         return uri.lastPathSegment?.substringAfterLast('/')
+    }
+
+    private fun downloadFile(url: String, outputFile: File) {
+        val connection = URL(url).openConnection().apply {
+            connectTimeout = DOWNLOAD_TIMEOUT_MS
+            readTimeout = DOWNLOAD_TIMEOUT_MS
+            setRequestProperty("User-Agent", "VoxTranscribe")
+        }
+        connection.getInputStream().use { input ->
+            FileOutputStream(outputFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+
+    private companion object {
+        const val DOWNLOAD_TIMEOUT_MS = 60_000
     }
 }

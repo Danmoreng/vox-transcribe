@@ -4,11 +4,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.voxtranscribe.MainActivity
@@ -72,10 +76,26 @@ class TranscriptionService : LifecycleService() {
     }
 
     private fun startForegroundService(noteId: Long) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "Cannot start transcription without RECORD_AUDIO permission")
+            stopSelf()
+            return
+        }
+
         activeNoteId = noteId
         finalizedTranscriptParts.clear()
         val notification = createNotification("Vox Transcribe is listening...")
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         
         lifecycleScope.launch {
             Log.d(TAG, "Launching collector for noteId: $noteId")
@@ -85,6 +105,10 @@ class TranscriptionService : LifecycleService() {
                 repository.transcriptionState.collect { entry ->
                     Log.d(TAG, "Received entry: ${entry.text}, isFinal: ${entry.isFinal}")
                     if (entry.isFinal) {
+                        if (finalizedTranscriptParts.any { it.trim() == entry.text.trim() }) {
+                            Log.d(TAG, "Skipping duplicate final segment for note $noteId")
+                            return@collect
+                        }
                         finalizedTranscriptParts += entry.text
                         try {
                             // Prevent cancellation during save
@@ -109,12 +133,39 @@ class TranscriptionService : LifecycleService() {
             Log.d(TAG, "Calling stopListening...")
             updateNotification("Finalizing note...")
             repository.stopListening()
+            persistVisibleTranscriptFallback()
             generateTitleForActiveNote()
             segmentCollectorJob?.cancel()
             segmentCollectorJob = null
             Log.d(TAG, "stopListening returned. Stopping service.")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
+        }
+    }
+
+    private suspend fun persistVisibleTranscriptFallback() {
+        val noteId = activeNoteId ?: return
+        if (finalizedTranscriptParts.isNotEmpty()) {
+            return
+        }
+
+        val text = repository.partialText.value.trim()
+        if (text.isBlank()) {
+            Log.w(TAG, "No finalized or visible transcript available for note $noteId")
+            return
+        }
+        if (finalizedTranscriptParts.any { it.trim() == text }) {
+            return
+        }
+
+        try {
+            withContext(NonCancellable) {
+                notesRepository.insertSegment(noteId, text, true)
+            }
+            finalizedTranscriptParts += text
+            Log.d(TAG, "Saved visible transcript fallback to DB for note $noteId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save visible transcript fallback", e)
         }
     }
 

@@ -33,27 +33,37 @@ class AudioRecorder @Inject constructor() {
     val audioFlow: Flow<FloatArray> get() = _audioChannel.receiveAsFlow()
 
     @SuppressLint("MissingPermission")
-    fun startRecording() {
-        if (isRecording.get()) return
+    fun startRecording(): Boolean {
+        if (isRecording.get()) return true
 
         try {
             _audioChannel = Channel(Channel.UNLIMITED)
             
             Log.d("AudioRecorder", "Initializing AudioRecord with buffer size: $bufferSize")
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                channelConfig,
-                audioEncoding,
-                bufferSize
-            )
+            audioRecord = AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(channelConfig)
+                        .setEncoding(audioEncoding)
+                        .build()
+                )
+                .setBufferSizeInBytes(bufferSize)
+                .build()
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e("AudioRecorder", "AudioRecord initialization failed")
-                return
+                release()
+                return false
             }
 
             audioRecord?.startRecording()
+            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                Log.e("AudioRecorder", "AudioRecord did not enter RECORDING state")
+                release()
+                return false
+            }
             isRecording.set(true)
             Log.d("AudioRecorder", "Started recording")
 
@@ -82,8 +92,11 @@ class AudioRecorder @Inject constructor() {
                     Log.d("AudioRecorder", "Audio channel closed")
                 }
             }
+            return true
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Error starting recording", e)
+            release()
+            return false
         }
     }
 
