@@ -12,8 +12,17 @@ data class Note(
     val startTime: Long = System.currentTimeMillis(),
     val endTime: Long? = null,
     val summary: String? = null,
-    val structuredNotes: String? = null
+    val structuredNotes: String? = null,
+    val cleanedTranscript: String? = null,
+    val aiStatus: String = AI_STATUS_IDLE,
+    val aiProgress: Float = 0f,
+    val aiStatusMessage: String? = null,
 )
+
+const val AI_STATUS_IDLE = "idle"
+const val AI_STATUS_PROCESSING = "processing"
+const val AI_STATUS_DONE = "done"
+const val AI_STATUS_FAILED = "failed"
 
 @Entity(
     tableName = "transcript_segments",

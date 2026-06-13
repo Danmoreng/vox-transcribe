@@ -31,6 +31,14 @@ class NotesRepository(private val notesDao: NotesDao) {
         notesDao.updateAiResults(noteId, summary, structuredNotes)
     }
 
+    suspend fun updateCleanedTranscript(noteId: Long, cleanedTranscript: String?) {
+        notesDao.updateCleanedTranscript(noteId, cleanedTranscript)
+    }
+
+    suspend fun updateAiStatus(noteId: Long, status: String, progress: Float, message: String?) {
+        notesDao.updateAiStatus(noteId, status, progress, message)
+    }
+
     suspend fun updateNoteTitle(noteId: Long, title: String) {
         notesDao.updateNoteTitle(noteId, title)
     }

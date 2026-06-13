@@ -23,6 +23,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -43,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
+import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.data.db.Note
 import com.example.voxtranscribe.data.db.NoteWithSegments
 import com.example.voxtranscribe.ui.DetailViewModel
@@ -154,7 +157,7 @@ private fun NoteContent(
     detail: NoteWithSegments,
     modifier: Modifier = Modifier,
 ) {
-    val transcript = remember(detail.segments) {
+    val transcript = remember(detail.note.cleanedTranscript, detail.segments) {
         buildDisplayTranscript(detail)
     }
     LazyColumn(
@@ -162,11 +165,66 @@ private fun NoteContent(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        if (detail.note.aiStatus == AI_STATUS_PROCESSING || detail.note.aiStatus == AI_STATUS_FAILED) {
+            item {
+                AiProgressCard(note = detail.note)
+            }
+        }
         item {
             SummaryCard(note = detail.note)
         }
+        detail.note.structuredNotes?.trim()?.takeIf { it.isNotBlank() }?.let { notes ->
+            item {
+                NotesCard(notes = notes)
+            }
+        }
         item {
             TranscriptCard(transcript = transcript)
+        }
+    }
+}
+
+@Composable
+private fun AiProgressCard(note: Note) {
+    val isFailed = note.aiStatus == AI_STATUS_FAILED
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFailed) {
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            },
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = if (isFailed) "AI cleanup failed" else "AI cleanup running",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (!isFailed) {
+                LinearProgressIndicator(
+                    progress = { note.aiProgress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Text(
+                text = note.aiStatusMessage ?: if (isFailed) {
+                    "The transcript was saved, but AI cleanup did not finish."
+                } else {
+                    "Generating title, cleaned transcript and summary. Short notes usually finish in under a minute; longer notes can take several minutes."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isFailed) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
         }
     }
 }
@@ -187,13 +245,30 @@ private fun SummaryCard(note: Note) {
             val summary = note.summary?.trim()
             if (summary.isNullOrBlank()) {
                 Text(
-                    text = "Summary will appear here once AI cleanup has run.",
+                    text = if (note.aiStatus == AI_STATUS_PROCESSING) {
+                        "Summary is being generated..."
+                    } else {
+                        "Summary will appear here once AI cleanup has run."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Markdown(summary)
             }
+        }
+    }
+}
+
+@Composable
+private fun NotesCard(notes: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("Notes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Markdown(notes)
         }
     }
 }
@@ -228,6 +303,11 @@ private fun copyNoteToClipboard(context: Context, detail: NoteWithSegments) {
             appendLine("Summary")
             appendLine(summary)
         }
+        detail.note.structuredNotes?.trim()?.takeIf { it.isNotBlank() }?.let { notes ->
+            appendLine()
+            appendLine("Notes")
+            appendLine(notes)
+        }
         if (transcript.isNotBlank()) {
             appendLine()
             appendLine("Transcript")
@@ -241,6 +321,10 @@ private fun copyNoteToClipboard(context: Context, detail: NoteWithSegments) {
 }
 
 private fun buildDisplayTranscript(detail: NoteWithSegments): String {
+    detail.note.cleanedTranscript?.trim()?.takeIf { it.isNotBlank() }?.let { cleanedTranscript ->
+        return cleanedTranscript
+    }
+
     return detail.segments
         .asSequence()
         .map { it.text.trim() }

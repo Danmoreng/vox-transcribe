@@ -16,6 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
+import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.data.db.Note
 import com.example.voxtranscribe.ui.TranscriptionViewModel
 import java.text.SimpleDateFormat
@@ -122,6 +124,26 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
+                if (note.aiStatus == AI_STATUS_PROCESSING) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { note.aiProgress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = note.aiStatusMessage ?: "AI cleanup running...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else if (note.aiStatus == AI_STATUS_FAILED) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = note.aiStatusMessage ?: "AI cleanup failed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             
             IconButton(onClick = onDelete) {

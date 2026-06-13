@@ -17,6 +17,10 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.voxtranscribe.MainActivity
 import com.example.voxtranscribe.data.ai.AiRepository
+import com.example.voxtranscribe.data.db.AI_STATUS_DONE
+import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
+import com.example.voxtranscribe.data.db.AI_STATUS_IDLE
+import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.NonCancellable
@@ -160,7 +164,7 @@ class TranscriptionService : LifecycleService() {
             val finalizedCountBeforeStop = finalizedPartCount()
             repository.stopListening()
             persistVisibleTranscriptFallback(finalizedCountBeforeStop)
-            generateTitleForActiveNote()
+            generateAiOutputsForActiveNote()
             segmentCollectorJob?.cancel()
             segmentCollectorJob = null
             Log.d(TAG, "stopListening returned. Stopping service.")
@@ -227,7 +231,7 @@ class TranscriptionService : LifecycleService() {
         return text.trim().replace(Regex("\\s+"), " ")
     }
 
-    private suspend fun generateTitleForActiveNote() {
+    private suspend fun generateAiOutputsForActiveNote() {
         val noteId = activeNoteId ?: return
         val transcript = finalizedTranscriptSnapshot()
             .asSequence()
@@ -236,23 +240,54 @@ class TranscriptionService : LifecycleService() {
             .joinToString(separator = "\n")
             .trim()
         if (transcript.isBlank()) {
+            updateAiProgress(noteId, AI_STATUS_IDLE, 0f, null)
             activeNoteId = null
             finalizedTranscriptParts.clear()
             return
         }
 
         try {
-            Log.d(TAG, "Generating automatic title for noteId: $noteId")
-            updateNotification("Title generation...")
+            Log.d(TAG, "Generating automatic AI outputs for noteId: $noteId")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.1f, "Preparing AI cleanup...")
+
+            updateNotification("Generating title...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.25f, "Generating title...")
             val title = aiRepository.generateTitle(transcript)
             withContext(NonCancellable) {
                 notesRepository.updateNoteTitle(noteId, title)
             }
+
+            updateNotification("Cleaning transcript...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.5f, "Cleaning transcript...")
+            val cleanedTranscript = aiRepository.cleanTranscript(transcript).ifBlank { transcript }
+            withContext(NonCancellable) {
+                notesRepository.updateCleanedTranscript(noteId, cleanedTranscript)
+            }
+
+            updateNotification("Generating summary...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.75f, "Generating summary...")
+            val summary = aiRepository.summarize(cleanedTranscript)
+
+            updateNotification("Generating notes...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.9f, "Generating notes...")
+            val notes = aiRepository.generateMeetingNotes(cleanedTranscript)
+            withContext(NonCancellable) {
+                notesRepository.updateAiResults(noteId, summary, notes)
+            }
+
+            updateAiProgress(noteId, AI_STATUS_DONE, 1f, "AI cleanup complete")
         } catch (e: Exception) {
-            Log.w(TAG, "Automatic title generation failed for noteId: $noteId", e)
+            Log.w(TAG, "Automatic AI generation failed for noteId: $noteId", e)
+            updateAiProgress(noteId, AI_STATUS_FAILED, 1f, "AI cleanup failed")
         } finally {
             activeNoteId = null
             finalizedTranscriptParts.clear()
+        }
+    }
+
+    private suspend fun updateAiProgress(noteId: Long, status: String, progress: Float, message: String?) {
+        withContext(NonCancellable) {
+            notesRepository.updateAiStatus(noteId, status, progress.coerceIn(0f, 1f), message)
         }
     }
 
