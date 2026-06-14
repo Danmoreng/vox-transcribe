@@ -1,8 +1,6 @@
 package com.example.voxtranscribe.data.gemma
 
 import android.content.Context
-import android.net.Uri
-import android.provider.OpenableColumns
 import com.example.voxtranscribe.data.ModelDownloadProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -22,12 +20,6 @@ data class GemmaImportedModelStatus(
     val isImported: Boolean,
     val fileSizeBytes: Long,
 )
-
-sealed interface GemmaImportResult {
-    data class Success(val model: GemmaModelSpec) : GemmaImportResult
-    data class UnsupportedFile(val message: String) : GemmaImportResult
-    data class Failure(val message: String) : GemmaImportResult
-}
 
 sealed interface GemmaDownloadResult {
     data class Success(val model: GemmaModelSpec) : GemmaDownloadResult
@@ -90,63 +82,6 @@ class GemmaImportRepository @Inject constructor(
         }
     }
 
-    suspend fun importModelFromUri(uri: Uri): GemmaImportResult {
-        return withContext(Dispatchers.IO) {
-            val sourceFileName = getDisplayName(uri)
-                ?: return@withContext GemmaImportResult.Failure("Could not determine the selected file name.")
-
-            val spec = GemmaModelCatalog.findSupportedModelForImport(sourceFileName)
-                ?: return@withContext GemmaImportResult.UnsupportedFile(
-                    "Only ${GemmaModelCatalog.supportedModels.joinToString { it.expectedFileName }} are supported."
-                )
-
-            val targetFile = getModelFile(spec)
-            val targetDir = targetFile.parentFile
-                ?: return@withContext GemmaImportResult.Failure("Could not prepare model storage.")
-
-            if (!targetDir.exists() && !targetDir.mkdirs()) {
-                return@withContext GemmaImportResult.Failure("Could not create the model directory.")
-            }
-
-            val tempFile = File(targetDir, "${targetFile.name}.tmp")
-
-            try {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                } ?: return@withContext GemmaImportResult.Failure("Could not open the selected file.")
-
-                if (targetFile.exists() && !targetFile.delete()) {
-                    return@withContext GemmaImportResult.Failure("Could not replace the existing imported model.")
-                }
-
-                if (!tempFile.renameTo(targetFile)) {
-                    return@withContext GemmaImportResult.Failure("Could not finalize the imported model file.")
-                }
-
-                refresh()
-                GemmaImportResult.Success(spec)
-            } catch (e: Exception) {
-                tempFile.delete()
-                GemmaImportResult.Failure(e.message ?: "Import failed.")
-            }
-        }
-    }
-
-    suspend fun deleteImportedModel(modelId: GemmaModelId): Boolean {
-        return withContext(Dispatchers.IO) {
-            val spec = GemmaModelCatalog.supportedModels.firstOrNull { it.id == modelId } ?: return@withContext false
-            val deleted = getModelFile(spec).let { file ->
-                !file.exists() || file.delete()
-            }
-            if (deleted) {
-                refresh()
-            }
-            deleted
-        }
-    }
-
     private fun readModelStatuses(): List<GemmaImportedModelStatus> {
         return GemmaModelCatalog.supportedModels.map { spec ->
             val file = getModelFile(spec)
@@ -165,16 +100,6 @@ class GemmaImportRepository @Inject constructor(
 
     private fun getModelDirectory(): File {
         return File(context.getExternalFilesDir(null), "gemma")
-    }
-
-    private fun getDisplayName(uri: Uri): String? {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0 && cursor.moveToFirst()) {
-                return cursor.getString(nameIndex)
-            }
-        }
-        return uri.lastPathSegment?.substringAfterLast('/')
     }
 
     private fun downloadFile(

@@ -98,7 +98,6 @@ fun VoxNavGraph(navController: NavHostController) {
             DetailScreen(
                 noteId = noteId,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToModelSettings = { navController.navigate(Screen.GemmaModel.route) }
             )
         }
         composable(Screen.GemmaModel.route) {

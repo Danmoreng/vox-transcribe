@@ -7,11 +7,11 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
@@ -28,6 +28,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,13 +39,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.R
 import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
 import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.data.db.Note
@@ -56,7 +62,6 @@ import com.mikepenz.markdown.m3.Markdown
 fun DetailScreen(
     noteId: Long,
     onNavigateBack: () -> Unit,
-    onNavigateToModelSettings: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val noteDetail by viewModel.getNoteDetail(noteId).collectAsStateWithLifecycle()
@@ -64,6 +69,7 @@ fun DetailScreen(
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val copiedMessage = stringResource(R.string.copied)
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -82,8 +88,8 @@ fun DetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete note?") },
-            text = { Text("This removes the recording transcript and AI summary.") },
+            title = { Text(stringResource(R.string.delete_note_title)) },
+            text = { Text(stringResource(R.string.delete_note_detail_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -91,12 +97,12 @@ fun DetailScreen(
                         showDeleteDialog = false
                     },
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )
@@ -106,10 +112,17 @@ fun DetailScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(noteDetail?.note?.title ?: "Note") },
+                title = {
+                    Text(
+                        text = noteDetail?.note?.title ?: stringResource(R.string.note),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
@@ -117,18 +130,18 @@ fun DetailScreen(
                     IconButton(
                         onClick = {
                             detail?.let {
-                                copyNoteToClipboard(context, it)
+                                copyNoteToClipboard(context, it, copiedMessage)
                             }
                         },
                         enabled = detail != null,
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy))
                     }
                     IconButton(
                         onClick = { showDeleteDialog = true },
                         enabled = detail != null,
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                     }
                 },
             )
@@ -160,26 +173,47 @@ private fun NoteContent(
     val transcript = remember(detail.note.cleanedTranscript, detail.segments) {
         buildDisplayTranscript(detail)
     }
-    LazyColumn(
+    var selectedTab by remember { mutableStateOf(0) }
+    Column(
         modifier = modifier,
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (detail.note.aiStatus == AI_STATUS_PROCESSING || detail.note.aiStatus == AI_STATUS_FAILED) {
-            item {
-                AiProgressCard(note = detail.note)
+        TabRow(
+            selectedTabIndex = selectedTab,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text(stringResource(R.string.transcript)) },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text(stringResource(R.string.summary)) },
+            )
+        }
+        if (selectedTab == 0) {
+            TranscriptContent(
+                transcript = transcript,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (detail.note.aiStatus == AI_STATUS_PROCESSING || detail.note.aiStatus == AI_STATUS_FAILED) {
+                    AiProgressCard(note = detail.note)
+                }
+                SummaryContent(note = detail.note)
             }
-        }
-        item {
-            SummaryCard(note = detail.note)
-        }
-        detail.note.structuredNotes?.trim()?.takeIf { it.isNotBlank() }?.let { notes ->
-            item {
-                NotesCard(notes = notes)
-            }
-        }
-        item {
-            TranscriptCard(transcript = transcript)
         }
     }
 }
@@ -202,7 +236,7 @@ private fun AiProgressCard(note: Note) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = if (isFailed) "AI cleanup failed" else "AI cleanup running",
+                text = if (isFailed) stringResource(R.string.ai_cleanup_failed) else stringResource(R.string.ai_cleanup_running),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -213,10 +247,10 @@ private fun AiProgressCard(note: Note) {
                 )
             }
             Text(
-                text = note.aiStatusMessage ?: if (isFailed) {
-                    "The transcript was saved, but AI cleanup did not finish."
+                text = if (isFailed) {
+                    stringResource(R.string.ai_cleanup_failed_description)
                 } else {
-                    "Generating title, cleaned transcript and summary. Short notes usually finish in under a minute; longer notes can take several minutes."
+                    aiProgressLabel(note.aiProgress)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isFailed) {
@@ -230,30 +264,35 @@ private fun AiProgressCard(note: Note) {
 }
 
 @Composable
-private fun SummaryCard(note: Note) {
-    Card(
+private fun aiProgressLabel(progress: Float): String {
+    return when {
+        progress < 0.25f -> stringResource(R.string.ai_status_preparing)
+        progress < 0.5f -> stringResource(R.string.ai_status_title)
+        progress < 0.75f -> stringResource(R.string.ai_status_transcript)
+        progress < 1f -> stringResource(R.string.ai_status_summary)
+        else -> stringResource(R.string.ai_status_complete)
+    }
+}
+
+@Composable
+private fun SummaryContent(note: Note) {
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            val summary = note.summary?.trim()
-            if (summary.isNullOrBlank()) {
-                Text(
-                    text = if (note.aiStatus == AI_STATUS_PROCESSING) {
-                        "Summary is being generated..."
-                    } else {
-                        "Summary will appear here once AI cleanup has run."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
+        val summary = note.summary?.trim()
+        if (summary.isNullOrBlank()) {
+            Text(
+                text = if (note.aiStatus == AI_STATUS_PROCESSING) {
+                    stringResource(R.string.summary_generating)
+                } else {
+                    stringResource(R.string.summary_pending)
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            SelectionContainer {
                 Markdown(summary)
             }
         }
@@ -261,63 +300,52 @@ private fun SummaryCard(note: Note) {
 }
 
 @Composable
-private fun NotesCard(notes: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Notes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Markdown(notes)
-        }
-    }
-}
-
-@Composable
-private fun TranscriptCard(transcript: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("Transcript", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            if (transcript.isBlank()) {
+private fun TranscriptContent(
+    transcript: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.padding(top = 8.dp),
+    ) {
+        if (transcript.isBlank()) {
+            Text(
+                text = stringResource(R.string.no_transcript_text_saved),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            SelectionContainer {
                 Text(
-                    text = "No transcript text saved.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = transcript,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
                 )
-            } else {
-                Text(transcript, style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
 }
 
-private fun copyNoteToClipboard(context: Context, detail: NoteWithSegments) {
+private fun copyNoteToClipboard(context: Context, detail: NoteWithSegments, copiedMessage: String) {
     val transcript = buildDisplayTranscript(detail)
     val text = buildString {
         appendLine(detail.note.title)
         detail.note.summary?.trim()?.takeIf { it.isNotBlank() }?.let { summary ->
             appendLine()
-            appendLine("Summary")
+            appendLine(context.getString(R.string.summary))
             appendLine(summary)
-        }
-        detail.note.structuredNotes?.trim()?.takeIf { it.isNotBlank() }?.let { notes ->
-            appendLine()
-            appendLine("Notes")
-            appendLine(notes)
         }
         if (transcript.isNotBlank()) {
             appendLine()
-            appendLine("Transcript")
+            appendLine(context.getString(R.string.transcript))
             appendLine(transcript)
         }
     }.trim()
 
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Vox Note", text))
-    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.note), text))
+    Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
 }
 
 private fun buildDisplayTranscript(detail: NoteWithSegments): String {
@@ -325,6 +353,10 @@ private fun buildDisplayTranscript(detail: NoteWithSegments): String {
         return cleanedTranscript
     }
 
+    return buildRawTranscript(detail)
+}
+
+private fun buildRawTranscript(detail: NoteWithSegments): String {
     return detail.segments
         .asSequence()
         .map { it.text.trim() }

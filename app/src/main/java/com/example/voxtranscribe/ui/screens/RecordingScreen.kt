@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,11 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.ui.components.StatItem
 import com.example.voxtranscribe.ui.TranscriptionViewModel
+import com.example.voxtranscribe.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +43,10 @@ fun RecordingScreen(
     val engineState by viewModel.engineState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val transcriptScrollState = rememberScrollState()
+    val engineReadyMessage = stringResource(R.string.engine_ready)
+    val engineMissingMessage = stringResource(R.string.engine_missing)
+    val copiedMessage = stringResource(R.string.copied_to_clipboard)
+    val transcriptLabel = stringResource(R.string.transcript)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -57,9 +64,9 @@ fun RecordingScreen(
     // Show toast when engine becomes ready
     LaunchedEffect(engineState) {
         if (engineState == com.example.voxtranscribe.data.EngineState.Ready) {
-            Toast.makeText(context, "Engine Loaded - Ready to Record", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, engineReadyMessage, Toast.LENGTH_SHORT).show()
         } else if (engineState == com.example.voxtranscribe.data.EngineState.Uninitialized) {
-            Toast.makeText(context, "Import and select the Nemotron streaming model before recording", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, engineMissingMessage, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -81,23 +88,23 @@ fun RecordingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Live Recording") },
+                title = { Text(stringResource(R.string.recording_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isListening || isPaused) viewModel.stopRecording()
                         onNavigateBack()
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Transcription", transcription)
+                        val clip = ClipData.newPlainText(transcriptLabel, transcription)
                         clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                     }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy))
                     }
                 }
             )
@@ -132,11 +139,11 @@ fun RecordingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StatItem(label = "Status", value = stats.debugStatus)
-                        StatItem(label = "RTF", value = stats.realtimeFactorText)
-                        StatItem(label = "Queue", value = "${stats.queuedClips}")
+                        StatItem(label = stringResource(R.string.status), value = stats.debugStatus)
+                        StatItem(label = stringResource(R.string.rtf), value = stats.realtimeFactorText)
+                        StatItem(label = stringResource(R.string.queue), value = "${stats.queuedClips}")
                         StatItem(
-                            label = "Dropped",
+                            label = stringResource(R.string.dropped),
                             value = "${stats.droppedClips}",
                             color = if (stats.droppedClips > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                         )
@@ -156,8 +163,8 @@ fun RecordingScreen(
                 Text(
                     text = when {
                         transcription.isNotEmpty() -> transcription
-                        isPaused -> "Paused"
-                        else -> "Listening..."
+                        isPaused -> stringResource(R.string.paused)
+                        else -> stringResource(R.string.listening)
                     },
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (transcription.isEmpty()) Color.Gray else MaterialTheme.colorScheme.onSurface
@@ -192,8 +199,8 @@ private fun RecordingControlsBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                StatItem(label = "Time", value = "${durationSeconds}s")
-                StatItem(label = "Words", value = "$wordCount")
+                StatItem(label = stringResource(R.string.time), value = "${durationSeconds}s")
+                StatItem(label = stringResource(R.string.words), value = "$wordCount")
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -203,7 +210,7 @@ private fun RecordingControlsBar(
                 ) {
                     Icon(
                         imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                        contentDescription = if (isPaused) "Resume" else "Pause",
+                        contentDescription = if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause),
                     )
                 }
                 FilledIconButton(
@@ -214,7 +221,7 @@ private fun RecordingControlsBar(
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     ),
                 ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop")
+                    Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
                 }
             }
         }

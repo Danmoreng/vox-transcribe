@@ -1,6 +1,5 @@
 package com.example.voxtranscribe.data.ai
 
-import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.gemma.GemmaRuntimeManager
 import java.util.Locale
 import javax.inject.Inject
@@ -11,13 +10,11 @@ import kotlinx.coroutines.withContext
 @Singleton
 class GemmaAiRepository @Inject constructor(
     private val runtimeManager: GemmaRuntimeManager,
-    private val settingsRepository: GemmaSettingsRepository,
 ) : AiRepository {
 
     override suspend fun cleanTranscript(transcript: String): String = withContext(Dispatchers.IO) {
-        val preferences = currentPreferences()
         val cleanedTranscript = sanitizeTranscriptForPrompt(transcript)
-        val languageInstruction = buildLanguageInstruction(preferences.outputLanguage, cleanedTranscript)
+        val languageInstruction = buildLanguageInstruction(cleanedTranscript)
         if (cleanedTranscript.isBlank()) {
             return@withContext ""
         }
@@ -40,9 +37,8 @@ class GemmaAiRepository @Inject constructor(
     }
 
     override suspend fun summarize(transcript: String): String = withContext(Dispatchers.IO) {
-        val preferences = currentPreferences()
         val cleanedTranscript = sanitizeTranscriptForPrompt(transcript)
-        val languageInstruction = buildLanguageInstruction(preferences.outputLanguage, cleanedTranscript)
+        val languageInstruction = buildLanguageInstruction(cleanedTranscript)
         generateTranscriptOutput(
             transcript = cleanedTranscript,
             requestedGenerationTokens = SUMMARY_GENERATION_TOKENS,
@@ -51,7 +47,7 @@ class GemmaAiRepository @Inject constructor(
                 """
                     Summarize the following meeting transcript.
                     $languageInstruction
-                    ${preferences.summaryStyle.summaryInstruction}
+                    $SUMMARY_INSTRUCTION
                     Do not invent facts.
                     Return the summary only in the required output language.
 
@@ -63,7 +59,7 @@ class GemmaAiRepository @Inject constructor(
                 """
                     Combine the following partial meeting summaries into one coherent final summary.
                     $languageInstruction
-                    ${preferences.summaryStyle.summaryInstruction}
+                    $SUMMARY_INSTRUCTION
                     Deduplicate overlap and preserve only information supported by the transcript.
                     Return the final summary only in the required output language.
 
@@ -74,45 +70,9 @@ class GemmaAiRepository @Inject constructor(
         )
     }
 
-    override suspend fun generateMeetingNotes(transcript: String): String = withContext(Dispatchers.IO) {
-        val preferences = currentPreferences()
-        val cleanedTranscript = sanitizeTranscriptForPrompt(transcript)
-        val languageInstruction = buildLanguageInstruction(preferences.outputLanguage, cleanedTranscript)
-        generateTranscriptOutput(
-            transcript = cleanedTranscript,
-            requestedGenerationTokens = NOTES_GENERATION_TOKENS,
-            fallbackValue = "No meeting notes generated.",
-            promptBuilder = { text ->
-                """
-                    Generate meeting notes from the following transcript.
-                    $languageInstruction
-                    ${preferences.summaryStyle.notesInstruction}
-                    Keep the notes faithful to the transcript and avoid repetition.
-                    Return the meeting notes only in the required output language.
-
-                    Transcript:
-                    $text
-                """.trimIndent()
-            },
-            reducerPromptBuilder = { partials ->
-                """
-                    Merge the following partial meeting notes into one final note set.
-                    $languageInstruction
-                    ${preferences.summaryStyle.notesInstruction}
-                    Deduplicate overlap and preserve decisions, action items, and important follow-ups.
-                    Return the final meeting notes only in the required output language.
-
-                    Partial meeting notes:
-                    $partials
-                """.trimIndent()
-            },
-        )
-    }
-
     override suspend fun generateTitle(transcript: String): String = withContext(Dispatchers.IO) {
-        val preferences = currentPreferences()
         val cleanedTranscript = sanitizeTranscriptForPrompt(transcript)
-        val languageInstruction = buildLanguageInstruction(preferences.outputLanguage, cleanedTranscript)
+        val languageInstruction = buildLanguageInstruction(cleanedTranscript)
         val titleTranscript = truncateTranscriptForPrompt(cleanedTranscript, TITLE_TRANSCRIPT_CHAR_LIMIT)
         runtimeManager.generateText(
             prompt = """
@@ -318,17 +278,11 @@ class GemmaAiRepository @Inject constructor(
             (message.contains("context", ignoreCase = true) && message.contains("too long", ignoreCase = true))
     }
 
-    private fun buildLanguageInstruction(language: AiOutputLanguage, transcript: String): String {
-        return when (language) {
-            AiOutputLanguage.ENGLISH -> "Required output language: English. Do not answer in any other language."
-            AiOutputLanguage.GERMAN -> "Required output language: German. Do not answer in any other language."
-            AiOutputLanguage.MATCH_TRANSCRIPT -> {
-                if (looksGerman(transcript)) {
-                    "Required output language: German, because the transcript is German. Do not answer in English."
-                } else {
-                    "Required output language: the same dominant language as the transcript. Do not translate unless the transcript itself changes language."
-                }
-            }
+    private fun buildLanguageInstruction(transcript: String): String {
+        return if (looksGerman(transcript)) {
+            "Required output language: German, because the transcript is German. Do not answer in English."
+        } else {
+            "Required output language: the same dominant language as the transcript. Do not translate unless the transcript itself changes language."
         }
     }
 
@@ -361,21 +315,10 @@ class GemmaAiRepository @Inject constructor(
         return germanSignals.count { lower.contains(it) } >= 3
     }
 
-    private fun currentPreferences(): AiPromptPreferences {
-        return AiPromptPreferences(
-            outputLanguage = AiOutputLanguage.MATCH_TRANSCRIPT,
-            summaryStyle = settingsRepository.aiSummaryStyle.value,
-        )
-    }
-
-    private data class AiPromptPreferences(
-        val outputLanguage: AiOutputLanguage,
-        val summaryStyle: AiSummaryStyle,
-    )
-
     private companion object {
+        const val SUMMARY_INSTRUCTION =
+            "Write a short, clean summary in one or two compact paragraphs. Focus on key discussion points, decisions, outcomes, and next steps."
         const val SUMMARY_GENERATION_TOKENS = 512
-        const val NOTES_GENERATION_TOKENS = 768
         const val CLEANUP_GENERATION_TOKENS = 1024
         const val CHUNK_GENERATION_TOKENS = 256
         const val REDUCED_CHUNK_GENERATION_TOKENS = 320

@@ -268,11 +268,8 @@ class TranscriptionService : LifecycleService() {
             updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.75f, "Generating summary...")
             val summary = aiRepository.summarize(cleanedTranscript)
 
-            updateNotification("Generating notes...")
-            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.9f, "Generating notes...")
-            val notes = aiRepository.generateMeetingNotes(cleanedTranscript)
             withContext(NonCancellable) {
-                notesRepository.updateAiResults(noteId, summary, notes)
+                notesRepository.updateAiResults(noteId, summary, null)
             }
 
             updateAiProgress(noteId, AI_STATUS_DONE, 1f, "AI cleanup complete")

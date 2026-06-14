@@ -27,10 +27,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.R
 import com.example.voxtranscribe.data.ModelDownloadProgress
 import com.example.voxtranscribe.ui.GemmaModelViewModel
 import java.text.DecimalFormat
@@ -52,7 +54,7 @@ fun SetupScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Welcome to Vox") })
+            TopAppBar(title = { Text(stringResource(R.string.setup_title)) })
         },
     ) { padding ->
         Column(
@@ -63,33 +65,33 @@ fun SetupScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                text = "Set up local transcription",
+                text = stringResource(R.string.setup_headline),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "Vox runs fully on your phone. Download both required models once, then you can record and summarize locally.",
+                text = stringResource(R.string.setup_description),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             SetupModelCard(
-                title = "Speech recognition",
-                description = "Nemotron ASR for live recording.",
+                title = stringResource(R.string.speech_recognition),
+                description = stringResource(R.string.speech_recognition_description),
                 installed = uiState.hasSpeechModel,
                 downloadSizeBytes = uiState.speechModelDownloadSizeBytes,
-                buttonText = "Download speech model",
+                buttonText = stringResource(R.string.download_speech_model),
                 enabled = !uiState.isImporting && !uiState.hasSpeechModel,
                 progress = uiState.downloadProgress?.takeIf { it.title == "Speech model" },
                 onClick = viewModel::downloadParakeetModel,
             )
 
             SetupModelCard(
-                title = "Text AI",
-                description = "Gemma for cleanup, titles and summaries.",
+                title = stringResource(R.string.text_ai),
+                description = stringResource(R.string.text_ai_description),
                 installed = uiState.hasTextAiModel,
                 downloadSizeBytes = uiState.textAiModelDownloadSizeBytes,
-                buttonText = "Download AI model",
+                buttonText = stringResource(R.string.download_ai_model),
                 enabled = !uiState.isImporting && !uiState.hasTextAiModel,
                 progress = uiState.downloadProgress?.takeIf { it.title == "Text AI model" },
                 onClick = viewModel::downloadRecommendedTextAiModel,
@@ -102,7 +104,7 @@ fun SetupScreen(
                 enabled = uiState.setupComplete || previewMode,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (previewMode) "Done" else "Start using Vox")
+                Text(if (previewMode) stringResource(R.string.done) else stringResource(R.string.start_using_vox))
             }
         }
     }
@@ -142,7 +144,7 @@ private fun SetupModelCard(
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        text = "Download size: about ${formatBytes(downloadSizeBytes)}",
+                        text = stringResource(R.string.download_size, formatBytes(downloadSizeBytes)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -155,7 +157,7 @@ private fun SetupModelCard(
             }
 
             when {
-                installed -> Text("Installed", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                installed -> Text(stringResource(R.string.installed), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 progress != null -> DownloadProgressView(progress)
                 else -> Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                     Text(buttonText)
@@ -185,7 +187,7 @@ private fun DownloadProgressView(progress: ModelDownloadProgress) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(progress.detail, style = MaterialTheme.typography.bodySmall)
                 Text(
-                    text = "${formatBytes(progress.downloadedBytes)} / ${progress.totalBytes?.let(::formatBytes) ?: "unknown"}",
+                    text = "${formatBytes(progress.downloadedBytes)} / ${progress.totalBytes?.let(::formatBytes) ?: stringResource(R.string.unknown)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

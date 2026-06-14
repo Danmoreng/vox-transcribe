@@ -10,16 +10,11 @@ data class GemmaModelSpec(
     val displayName: String,
     val expectedFileName: String,
     val sourceRepo: String,
-    val sourceFileName: String = expectedFileName,
     val downloadSizeBytes: Long,
     val minDeviceMemoryGb: Int,
-    val supportsAudio: Boolean = true,
-    val supportsText: Boolean = true,
 )
 
 object GemmaModelCatalog {
-    const val supportedImportExtension = ".litertlm"
-
     val supportedModels: List<GemmaModelSpec> = listOf(
         GemmaModelSpec(
             id = GemmaModelId.GEMMA_4_E2B,
@@ -42,15 +37,6 @@ object GemmaModelCatalog {
     val recommendedTextModel: GemmaModelSpec = supportedModels.first { it.id == GemmaModelId.GEMMA_4_E2B }
 
     fun downloadUrl(spec: GemmaModelSpec): String {
-        return "https://huggingface.co/${spec.sourceRepo}/resolve/main/${spec.sourceFileName}?download=true"
-    }
-
-    fun findSupportedModelForImport(fileName: String): GemmaModelSpec? {
-        val normalizedFileName = fileName.trim().lowercase()
-        return supportedModels.firstOrNull { it.expectedFileName.lowercase() == normalizedFileName }
-    }
-
-    fun isSupportedImportFile(fileName: String): Boolean {
-        return findSupportedModelForImport(fileName) != null
+        return "https://huggingface.co/${spec.sourceRepo}/resolve/main/${spec.expectedFileName}?download=true"
     }
 }

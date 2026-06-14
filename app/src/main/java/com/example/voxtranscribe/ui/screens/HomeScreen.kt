@@ -12,10 +12,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.voxtranscribe.R
 import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
 import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.data.db.Note
@@ -38,8 +40,8 @@ fun HomeScreen(
         val note = noteToDelete!!
         AlertDialog(
             onDismissRequest = { noteToDelete = null },
-            title = { Text("Delete Transcript") },
-            text = { Text("Are you sure you want to delete '${note.title}'? This action cannot be undone.") },
+            title = { Text(stringResource(R.string.delete_transcript)) },
+            text = { Text(stringResource(R.string.delete_note_message, note.title)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -48,12 +50,12 @@ fun HomeScreen(
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { noteToDelete = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -62,10 +64,10 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Vox Transcribe") },
+                title = { Text(stringResource(R.string.home_title)) },
                 actions = {
                     IconButton(onClick = onNavigateToModelSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                     }
                 }
             )
@@ -74,7 +76,7 @@ fun HomeScreen(
             ExtendedFloatingActionButton(
                 onClick = onNavigateToRecord,
                 icon = { Icon(Icons.Default.Mic, contentDescription = null) },
-                text = { Text("Record") }
+                text = { Text(stringResource(R.string.record)) }
             )
         }
     ) { padding ->
@@ -83,7 +85,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No recordings yet", color = Color.Gray)
+                Text(stringResource(R.string.no_recordings_yet), color = Color.Gray)
             }
         } else {
             LazyColumn(
@@ -132,14 +134,14 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = note.aiStatusMessage ?: "AI cleanup running...",
+                        text = aiProgressLabel(note.aiProgress),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 } else if (note.aiStatus == AI_STATUS_FAILED) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = note.aiStatusMessage ?: "AI cleanup failed",
+                        text = stringResource(R.string.ai_cleanup_failed),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -149,10 +151,21 @@ fun NoteCard(note: Note, onClick: () -> Unit, onDelete: () -> Unit) {
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = androidx.compose.material.icons.Icons.Default.Delete, 
-                    contentDescription = "Delete Note",
+                    contentDescription = stringResource(R.string.delete_note_content_description),
                     tint = MaterialTheme.colorScheme.error
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun aiProgressLabel(progress: Float): String {
+    return when {
+        progress < 0.25f -> stringResource(R.string.ai_status_preparing)
+        progress < 0.5f -> stringResource(R.string.ai_status_title)
+        progress < 0.75f -> stringResource(R.string.ai_status_transcript)
+        progress < 1f -> stringResource(R.string.ai_status_summary)
+        else -> stringResource(R.string.ai_status_complete)
     }
 }
