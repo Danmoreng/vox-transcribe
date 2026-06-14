@@ -1,114 +1,111 @@
 # Vox Transcribe
 
-Vox Transcribe is an offline Android meeting assistant for recording, transcribing, and summarizing conversations directly on-device.
+Vox Transcribe is a local-first Android app for recording speech, creating live transcripts, and turning those transcripts into clean notes directly on the phone.
 
-The app is built around Gemma 4 running through LiteRT-LM and is designed for a local-first workflow: record speech, keep transcripts in a local Room database, and generate titles, summaries, or meeting notes without sending audio or text to a server.
+The app is designed for a minimal workflow:
 
-## What The App Does
+1. Download the required speech and text AI models once.
+2. Record a conversation, thought, meeting, or voice note.
+3. Let the app transcribe, clean up the transcript, generate a title, and create a summary.
+4. Read, copy, and manage the resulting notes locally.
 
-- records long-form audio sessions with a foreground recording service
-- transcribes speech on-device using imported Gemma 4 LiteRT-LM models
-- stores transcripts and notes locally with Room
-- generates on-device note titles automatically after recording and can generate summaries and meeting notes from saved transcripts
-- renders AI-generated summaries and meeting notes as markdown in the detail view
-- supports manual model import and selection inside the app
+No audio or transcript text is sent to an app server.
 
-## Key Characteristics
+## Features
 
-- offline-only inference
-- no in-app authentication
-- no cloud fallback
-- one selected Gemma model used for both transcription and text tasks
-- inference prefers the LiteRT GPU backend when a compatible delegate is available, and falls back to CPU automatically
-- live transcription optimized for long-form recordings through clip scheduling and transcript stitching
-- note titles are generated automatically after recording stops; summaries and meeting notes remain manual
+- On-device live speech transcription
+- Pause, resume, and stop controls during recording
+- Local note storage with transcript and summary tabs
+- Automatic title generation after recording
+- Automatic transcript cleanup with on-device text AI
+- Automatic summary generation
+- Selectable and copyable transcript and summary text
+- One-tap copy for the full note
+- Minimal setup screen with direct model downloads and progress
+- App language setting with system default, English, and German
+- Transcription language setting with auto-detect, English, and German
+- Optional debug stats for transcription performance
 
-## Supported Models
+## Models
 
-The app currently supports manual import of these exact LiteRT-LM model files:
+Vox Transcribe currently uses two local models:
 
-- `gemma-4-E2B-it.litertlm`
-- `gemma-4-E4B-it.litertlm`
+| Purpose | Model | Runtime | Approx. download |
+| --- | --- | --- | --- |
+| Speech recognition | [Nemotron 3.5 ASR Streaming 0.6B ONNX INT4](https://huggingface.co/onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4) | ONNX Runtime GenAI | 1.5 GB |
+| Text AI | [Gemma 4 E2B LiteRT-LM](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) | LiteRT-LM | 2.6 GB |
 
-These files are not bundled with the app. Download them externally, then import them through the Gemma model screen.
+The models are not bundled in the repository or APK. The app downloads them from Hugging Face during setup and stores them locally on the device.
 
-## Tech Stack
+The code also contains catalog support for Gemma 4 E4B, but the recommended default text model is Gemma 4 E2B.
 
-- Kotlin
-- Jetpack Compose
-- Hilt
-- Room
-- LiteRT-LM (`com.google.ai.edge.litertlm`)
-- Mike Penz Multiplatform Markdown Renderer (`com.mikepenz:multiplatform-markdown-renderer-m3`)
-- Android Foreground Service
+## Privacy
 
-## How Transcription Works
+Vox Transcribe is built around local inference:
 
-Live transcription uses bounded audio clips rather than a single continuous streaming decoder. The app:
-
-- captures `16 kHz` mono microphone audio
-- cuts clips using a silence-aware sliding window
-- falls back to short overlap only when a clip must be forced to cut at the maximum window length
-- runs Gemma audio transcription locally
-- stitches adjacent clip results into a long-form transcript
-
-Current runtime note:
-
-- both transcription and text-generation tasks prefer the LiteRT GPU backend when supported on the device
-- the app checks GPU delegate availability first and falls back to CPU automatically if GPU is unavailable or engine initialization fails
-
-The app also includes optional transcription language guidance:
-
-- `Auto`
-- `German`
-- `English`
-
-If the spoken language is known in advance, selecting it can noticeably reduce language drift and prompt leakage during transcription.
-
-## Status
-
-The current branch is already usable for:
-
-- importing and selecting Gemma models
-- on-device title, summary, and meeting-notes generation
-- live on-device transcription with debug readouts for realtime factor, queue depth, and dropped clips
-
-Transcription quality is still being tuned, especially around boundary cleanup and model-specific live settings.
+- microphone audio is processed on-device
+- transcripts and summaries are stored in the local Room database
+- AI cleanup and summarization run on-device
+- internet access is only needed to download the model files
 
 ## Requirements
 
-- Android Studio Ladybug or newer
-- Android device on API 31+
-- enough free storage for imported `.litertlm` models
+- Android device with API 31 or newer
+- arm64-v8a device
+- At least 8 GB device memory recommended
+- Several GB of free storage for local models
+- Android Studio / Android Gradle Plugin compatible with the checked-in Gradle configuration
+- ONNX Runtime GenAI Android native package available at `models/onnxruntime-genai-android-0.14.0`
 
 ## Building
 
-Clone the repository and open it in Android Studio. The Android app no longer depends on JNI/CMake inference code or git submodules.
-
-For command-line Gradle use on Windows:
+Clone the repository and open it in Android Studio, or build from the command line:
 
 ```powershell
-.\scripts\gradlew-jbr.ps1 :app:compileDebugKotlin
+.\gradlew.bat assembleDebug
 ```
 
-## Basic Usage
+On Windows, the repository also includes a helper script for using the bundled JBR:
 
-1. Build and install the app on a supported device.
-2. Download one of the supported `.litertlm` files externally.
-3. Open the app and go to the Gemma model screen.
-4. Import the model file and select it.
-5. Choose a transcription language if you know the spoken language, or leave it on `Auto`.
-6. Start a recording and wait for the app to finalize the transcript and generate a note title automatically.
-7. Open a saved note to run summary and meeting-note generation manually.
-8. View generated summaries and meeting notes with markdown formatting preserved in the note detail screen.
+```powershell
+.\scripts\gradlew-jbr.ps1 assembleDebug
+```
 
-## Documentation
+The Android project builds native JNI glue for ONNX Runtime GenAI via CMake. The expected local native dependency layout is:
 
-- `docs/GEMMA_GALLERY_MIGRATION_PLAN.md`
-- `docs/GALLERY_STACK_RESEARCH.md`
-- `docs/GEMMA_INFERENCE_ARCHITECTURE.md`
-- `docs/MIGRATION_TASKLIST.md`
+```text
+models/
+  onnxruntime-genai-android-0.14.0/
+    include/
+    jni/
+      arm64-v8a/
+        libonnxruntime-genai.so
+```
+
+Model weights are downloaded by the app at runtime and do not need to be committed to the repository.
+
+## Tech Stack
+
+- [Kotlin](https://kotlinlang.org/)
+- [Jetpack Compose](https://developer.android.com/compose)
+- [Material 3](https://m3.material.io/)
+- [Room](https://developer.android.com/training/data-storage/room)
+- [Hilt](https://dagger.dev/hilt/)
+- [ONNX Runtime](https://onnxruntime.ai/)
+- [ONNX Runtime GenAI](https://github.com/microsoft/onnxruntime-genai)
+- [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM)
+- [Mike Penz Multiplatform Markdown Renderer](https://github.com/mikepenz/multiplatform-markdown-renderer)
+
+## Acknowledgements
+
+Vox Transcribe builds on excellent open-source and open-weight work:
+
+- [NVIDIA Nemotron 3.5 ASR Streaming 0.6B](https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b), the streaming ASR model family used for speech recognition
+- [ONNX Community Nemotron 3.5 ASR Streaming 0.6B ONNX INT4](https://huggingface.co/onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4), the Android-friendly ONNX model package downloaded by the app
+- [Gemma](https://ai.google.dev/gemma), used for local transcript cleanup, title generation, and summaries
+- [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM), used for running local text AI models on Android
+- [ONNX Runtime GenAI](https://github.com/microsoft/onnxruntime-genai), used for the streaming ASR runtime integration
 
 ## License
 
-MIT License. See `LICENSE` for details.
+MIT License. See [LICENSE](LICENSE) for details.
