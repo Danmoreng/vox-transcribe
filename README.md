@@ -26,6 +26,15 @@ No audio or transcript text is sent to an app server.
 - Transcription language setting with auto-detect, English, and German
 - Optional debug stats for transcription performance
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/home.jpg" width="24%" />
+  <img src="docs/screenshots/recording.jpg" width="24%" />
+  <img src="docs/screenshots/detail.jpg" width="24%" />
+  <img src="docs/screenshots/settings.jpg" width="24%" />
+</p>
+
 ## Models
 
 Vox Transcribe currently uses two local models:
