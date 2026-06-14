@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,11 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.ui.components.StatItem
 import com.example.voxtranscribe.ui.TranscriptionViewModel
+import com.example.voxtranscribe.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,9 +38,15 @@ fun RecordingScreen(
 ) {
     val transcription by viewModel.transcriptionState.collectAsStateWithLifecycle()
     val isListening by viewModel.isListening.collectAsStateWithLifecycle()
+    val isPaused by viewModel.isPaused.collectAsStateWithLifecycle()
     val stats by viewModel.stats.collectAsStateWithLifecycle()
     val engineState by viewModel.engineState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val transcriptScrollState = rememberScrollState()
+    val engineReadyMessage = stringResource(R.string.engine_ready)
+    val engineMissingMessage = stringResource(R.string.engine_missing)
+    val copiedMessage = stringResource(R.string.copied_to_clipboard)
+    val transcriptLabel = stringResource(R.string.transcript)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -55,9 +64,9 @@ fun RecordingScreen(
     // Show toast when engine becomes ready
     LaunchedEffect(engineState) {
         if (engineState == com.example.voxtranscribe.data.EngineState.Ready) {
-            Toast.makeText(context, "Engine Loaded - Ready to Record", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, engineReadyMessage, Toast.LENGTH_SHORT).show()
         } else if (engineState == com.example.voxtranscribe.data.EngineState.Uninitialized) {
-            Toast.makeText(context, "Import and select the Nemotron streaming model before recording", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, engineMissingMessage, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -70,61 +79,48 @@ fun RecordingScreen(
         permissionLauncher.launch(permissions.toTypedArray())
     }
 
+    LaunchedEffect(transcription, isListening, isPaused) {
+        if (transcription.isNotBlank() && (isListening || isPaused)) {
+            transcriptScrollState.animateScrollTo(transcriptScrollState.maxValue)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Live Recording") },
+                title = { Text(stringResource(R.string.recording_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (isListening) viewModel.stopRecording()
+                        if (isListening || isPaused) viewModel.stopRecording()
                         onNavigateBack()
                     }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Transcription", transcription)
+                        val clip = ClipData.newPlainText(transcriptLabel, transcription)
                         clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                     }) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                        Icon(Icons.Default.ContentCopy, contentDescription = stringResource(R.string.copy))
                     }
                 }
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (isListening) {
-                        viewModel.stopRecording()
-                    } else {
-                        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        permissionLauncher.launch(permissions.toTypedArray())
-                    }
-                },
-                containerColor = if (isListening) MaterialTheme.colorScheme.errorContainer else 
-                                 if (engineState == com.example.voxtranscribe.data.EngineState.Ready) MaterialTheme.colorScheme.primaryContainer else Color.Gray
-            ) {
-                if (engineState == com.example.voxtranscribe.data.EngineState.Loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isListening) Icons.Default.Stop else Icons.Default.Mic,
-                        contentDescription = if (isListening) "Stop" else "Start"
-                    )
-                }
-            }
-        },
-        floatingActionButtonPosition = FabPosition.Center
+        bottomBar = {
+            RecordingControlsBar(
+                durationSeconds = stats.durationSeconds,
+                wordCount = stats.wordCount,
+                isListening = isListening,
+                isPaused = isPaused,
+                isLoading = engineState == com.example.voxtranscribe.data.EngineState.Loading,
+                onPause = viewModel::pauseRecording,
+                onResume = viewModel::resumeRecording,
+                onStop = viewModel::stopRecording,
+            )
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -132,42 +128,7 @@ fun RecordingScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Surface(
-                tonalElevation = 2.dp,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StatItem(
-                        label = "Duration",
-                        value = "${stats.durationSeconds}s"
-                    )
-                    StatItem(
-                        label = "Words",
-                        value = "${stats.wordCount}"
-                    )
-                    if (stats.showDebugStats) {
-                        StatItem(
-                            label = "Engine",
-                            value = if (stats.isOffline) "Parakeet" else "Unknown",
-                            color = if (stats.isOffline) MaterialTheme.colorScheme.primary else Color.Gray
-                        )
-                        StatItem(
-                            label = "Speed",
-                            value = stats.speedText,
-                            color = if (stats.speedText == "n/a") Color.Gray else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
             if (stats.showDebugStats) {
-                Spacer(modifier = Modifier.height(16.dp))
-
                 Surface(
                     tonalElevation = 1.dp,
                     shape = RoundedCornerShape(8.dp),
@@ -178,33 +139,90 @@ fun RecordingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StatItem(label = "Status", value = stats.debugStatus)
-                        StatItem(label = "RTF", value = stats.realtimeFactorText)
-                        StatItem(label = "Queue", value = "${stats.queuedClips}")
+                        StatItem(label = stringResource(R.string.status), value = stats.debugStatus)
+                        StatItem(label = stringResource(R.string.rtf), value = stats.realtimeFactorText)
+                        StatItem(label = stringResource(R.string.queue), value = "${stats.queuedClips}")
                         StatItem(
-                            label = "Dropped",
+                            label = stringResource(R.string.dropped),
                             value = "${stats.droppedClips}",
                             color = if (stats.droppedClips > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(transcriptScrollState)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 Text(
-                    text = if (transcription.isEmpty()) "Listening..." else transcription,
+                    text = when {
+                        transcription.isNotEmpty() -> transcription
+                        isPaused -> stringResource(R.string.paused)
+                        else -> stringResource(R.string.listening)
+                    },
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (transcription.isEmpty()) Color.Gray else MaterialTheme.colorScheme.onSurface
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingControlsBar(
+    durationSeconds: Long,
+    wordCount: Int,
+    isListening: Boolean,
+    isPaused: Boolean,
+    isLoading: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 6.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                StatItem(label = stringResource(R.string.time), value = "${durationSeconds}s")
+                StatItem(label = stringResource(R.string.words), value = "$wordCount")
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(
+                    onClick = if (isPaused) onResume else onPause,
+                    enabled = !isLoading && (isListening || isPaused),
+                ) {
+                    Icon(
+                        imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause),
+                    )
+                }
+                FilledIconButton(
+                    onClick = onStop,
+                    enabled = !isLoading && (isListening || isPaused),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
+                }
             }
         }
     }

@@ -10,10 +10,13 @@ import com.example.voxtranscribe.ui.screens.HomeScreen
 import com.example.voxtranscribe.ui.screens.RecordingScreen
 import com.example.voxtranscribe.ui.screens.DetailScreen
 import com.example.voxtranscribe.ui.screens.GemmaModelScreen
+import com.example.voxtranscribe.ui.screens.SetupScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 
 sealed class Screen(val route: String) {
+    object Setup : Screen("setup")
+    object SetupPreview : Screen("setup?preview=true")
     object Home : Screen("home")
     object Record : Screen("record")
     object Detail : Screen("detail/{noteId}") {
@@ -26,7 +29,7 @@ sealed class Screen(val route: String) {
 fun VoxNavGraph(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route,
+        startDestination = Screen.Setup.route,
         enterTransition = {
             slideIntoContainer(
                 towards = AnimatedContentTransitionScope.SlideDirection.Start,
@@ -52,6 +55,27 @@ fun VoxNavGraph(navController: NavHostController) {
             )
         }
     ) {
+        composable(
+            route = "setup?preview={preview}",
+            arguments = listOf(navArgument("preview") {
+                type = NavType.BoolType
+                defaultValue = false
+            }),
+        ) { backStackEntry ->
+            val previewMode = backStackEntry.arguments?.getBoolean("preview") ?: false
+            SetupScreen(
+                previewMode = previewMode,
+                onSetupComplete = {
+                    if (previewMode) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Setup.route) { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
         composable(Screen.Home.route) {
             HomeScreen(
                 onNavigateToRecord = { navController.navigate(Screen.Record.route) },
@@ -74,12 +98,12 @@ fun VoxNavGraph(navController: NavHostController) {
             DetailScreen(
                 noteId = noteId,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToModelSettings = { navController.navigate(Screen.GemmaModel.route) }
             )
         }
         composable(Screen.GemmaModel.route) {
             GemmaModelScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSetupPreview = { navController.navigate(Screen.SetupPreview.route) },
             )
         }
     }

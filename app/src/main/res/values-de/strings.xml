@@ -1,0 +1,82 @@
+<resources>
+    <string name="app_name">Vox Transcribe</string>
+    <string name="back">Zurück</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="copy">Kopieren</string>
+    <string name="copied">Kopiert</string>
+    <string name="copied_to_clipboard">In die Zwischenablage kopiert</string>
+    <string name="delete">Löschen</string>
+    <string name="settings">Einstellungen</string>
+    <string name="system_default">Systemsprache</string>
+    <string name="auto">Automatisch</string>
+    <string name="english">Englisch</string>
+    <string name="german">Deutsch</string>
+
+    <string name="home_title">Vox Transcribe</string>
+    <string name="record">Aufnehmen</string>
+    <string name="no_recordings_yet">Noch keine Aufnahmen</string>
+    <string name="delete_transcript">Transkript löschen</string>
+    <string name="delete_note_message">Möchtest du \"%1$s\" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.</string>
+    <string name="delete_note_content_description">Notiz löschen</string>
+
+    <string name="recording_title">Live-Aufnahme</string>
+    <string name="engine_ready">Engine geladen - bereit zur Aufnahme</string>
+    <string name="engine_missing">Lade zuerst das Sprachmodell herunter</string>
+    <string name="listening">Höre zu...</string>
+    <string name="paused">Pausiert</string>
+    <string name="time">Zeit</string>
+    <string name="words">Wörter</string>
+    <string name="resume">Weiter</string>
+    <string name="pause">Pause</string>
+    <string name="stop">Stopp</string>
+    <string name="status">Status</string>
+    <string name="rtf">RTF</string>
+    <string name="queue">Warteschlange</string>
+    <string name="dropped">Verworfen</string>
+
+    <string name="setup_title">Willkommen bei Vox</string>
+    <string name="setup_headline">Lokale Transkription einrichten</string>
+    <string name="setup_description">Vox läuft vollständig auf deinem Smartphone. Lade beide benötigten Modelle einmal herunter, danach kannst du lokal aufnehmen und zusammenfassen.</string>
+    <string name="speech_recognition">Spracherkennung</string>
+    <string name="speech_recognition_description">Nemotron ASR für Live-Aufnahmen.</string>
+    <string name="text_ai">Text-KI</string>
+    <string name="text_ai_description">Gemma für Bereinigung, Titel und Zusammenfassungen.</string>
+    <string name="download_size">Downloadgröße: ca. %1$s</string>
+    <string name="download_speech_model">Sprachmodell herunterladen</string>
+    <string name="download_ai_model">KI-Modell herunterladen</string>
+    <string name="installed">Installiert</string>
+    <string name="start_using_vox">Vox starten</string>
+    <string name="done">Fertig</string>
+    <string name="unknown">unbekannt</string>
+
+    <string name="app_language">App-Sprache</string>
+    <string name="speech_language">Sprache der Aufnahme</string>
+    <string name="debug_stats">Debug-Statistiken</string>
+    <string name="debug_stats_description">Laufzeitdaten während der Aufnahme anzeigen.</string>
+    <string name="models">Modelle</string>
+    <string name="models_description">Beide benötigten Modelle sind lokal auf diesem Smartphone gespeichert.</string>
+    <string name="speech_model_status">Sprache: %1$s</string>
+    <string name="text_ai_model_status">Text-KI: %1$s</string>
+    <string name="missing">fehlt</string>
+    <string name="re_download_speech_model">Sprachmodell erneut herunterladen</string>
+    <string name="re_download_ai_model">KI-Modell erneut herunterladen</string>
+    <string name="view_setup_screen">Setup-Screen anzeigen</string>
+
+    <string name="note">Notiz</string>
+    <string name="delete_note_title">Notiz löschen?</string>
+    <string name="delete_note_detail_message">Dadurch werden Transkript und KI-Zusammenfassung gelöscht.</string>
+    <string name="transcript">Transkript</string>
+    <string name="summary">Zusammenfassung</string>
+    <string name="no_transcript_text_saved">Kein Transkript gespeichert.</string>
+    <string name="summary_generating">Zusammenfassung wird erstellt...</string>
+    <string name="summary_pending">Die Zusammenfassung erscheint hier, sobald die KI-Bereinigung abgeschlossen ist.</string>
+    <string name="ai_cleanup_failed">KI-Bereinigung fehlgeschlagen</string>
+    <string name="ai_cleanup_running">KI-Bereinigung läuft</string>
+    <string name="ai_cleanup_failed_description">Das Transkript wurde gespeichert, aber die KI-Bereinigung wurde nicht abgeschlossen.</string>
+    <string name="ai_cleanup_running_description">Titel, bereinigtes Transkript und Zusammenfassung werden erstellt. Kurze Notizen sind oft in unter einer Minute fertig; längere Notizen können mehrere Minuten dauern.</string>
+    <string name="ai_status_preparing">KI-Bereinigung wird vorbereitet...</string>
+    <string name="ai_status_title">Titel wird erstellt...</string>
+    <string name="ai_status_transcript">Transkript wird bereinigt...</string>
+    <string name="ai_status_summary">Zusammenfassung wird erstellt...</string>
+    <string name="ai_status_complete">KI-Bereinigung abgeschlossen</string>
+</resources>

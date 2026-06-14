@@ -1,3 +1,82 @@
 <resources>
     <string name="app_name">Vox Transcribe</string>
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="copy">Copy</string>
+    <string name="copied">Copied</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="delete">Delete</string>
+    <string name="settings">Settings</string>
+    <string name="system_default">System default</string>
+    <string name="auto">Auto</string>
+    <string name="english">English</string>
+    <string name="german">German</string>
+
+    <string name="home_title">Vox Transcribe</string>
+    <string name="record">Record</string>
+    <string name="no_recordings_yet">No recordings yet</string>
+    <string name="delete_transcript">Delete transcript</string>
+    <string name="delete_note_message">Are you sure you want to delete \"%1$s\"? This action cannot be undone.</string>
+    <string name="delete_note_content_description">Delete note</string>
+
+    <string name="recording_title">Live Recording</string>
+    <string name="engine_ready">Engine loaded - ready to record</string>
+    <string name="engine_missing">Download the speech model before recording</string>
+    <string name="listening">Listening...</string>
+    <string name="paused">Paused</string>
+    <string name="time">Time</string>
+    <string name="words">Words</string>
+    <string name="resume">Resume</string>
+    <string name="pause">Pause</string>
+    <string name="stop">Stop</string>
+    <string name="status">Status</string>
+    <string name="rtf">RTF</string>
+    <string name="queue">Queue</string>
+    <string name="dropped">Dropped</string>
+
+    <string name="setup_title">Welcome to Vox</string>
+    <string name="setup_headline">Set up local transcription</string>
+    <string name="setup_description">Vox runs fully on your phone. Download both required models once, then you can record and summarize locally.</string>
+    <string name="speech_recognition">Speech recognition</string>
+    <string name="speech_recognition_description">Nemotron ASR for live recording.</string>
+    <string name="text_ai">Text AI</string>
+    <string name="text_ai_description">Gemma for cleanup, titles and summaries.</string>
+    <string name="download_size">Download size: about %1$s</string>
+    <string name="download_speech_model">Download speech model</string>
+    <string name="download_ai_model">Download AI model</string>
+    <string name="installed">Installed</string>
+    <string name="start_using_vox">Start using Vox</string>
+    <string name="done">Done</string>
+    <string name="unknown">unknown</string>
+
+    <string name="app_language">App language</string>
+    <string name="speech_language">Speech language</string>
+    <string name="debug_stats">Debug stats</string>
+    <string name="debug_stats_description">Show runtime stats while recording.</string>
+    <string name="models">Models</string>
+    <string name="models_description">Both required models are stored locally on this phone.</string>
+    <string name="speech_model_status">Speech: %1$s</string>
+    <string name="text_ai_model_status">Text AI: %1$s</string>
+    <string name="missing">missing</string>
+    <string name="re_download_speech_model">Re-download speech model</string>
+    <string name="re_download_ai_model">Re-download AI model</string>
+    <string name="view_setup_screen">View setup screen</string>
+
+    <string name="note">Note</string>
+    <string name="delete_note_title">Delete note?</string>
+    <string name="delete_note_detail_message">This removes the recording transcript and AI summary.</string>
+    <string name="transcript">Transcript</string>
+    <string name="summary">Summary</string>
+    <string name="no_transcript_text_saved">No transcript text saved.</string>
+    <string name="summary_generating">Summary is being generated...</string>
+    <string name="summary_pending">Summary will appear here once AI cleanup has run.</string>
+    <string name="ai_cleanup_failed">AI cleanup failed</string>
+    <string name="ai_cleanup_running">AI cleanup running</string>
+    <string name="ai_cleanup_failed_description">The transcript was saved, but AI cleanup did not finish.</string>
+    <string name="ai_cleanup_running_description">Generating title, cleaned transcript and summary. Short notes usually finish in under a minute; longer notes can take several minutes.</string>
+    <string name="ai_status_preparing">Preparing AI cleanup...</string>
+    <string name="ai_status_title">Generating title...</string>
+    <string name="ai_status_transcript">Cleaning transcript...</string>
+    <string name="ai_status_summary">Generating summary...</string>
+    <string name="ai_status_complete">AI cleanup complete</string>
 </resources>

@@ -1,8 +1,7 @@
 package com.example.voxtranscribe.data.gemma
 
 import android.content.Context
-import android.net.Uri
-import android.provider.OpenableColumns
+import com.example.voxtranscribe.data.ModelDownloadProgress
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,12 +20,6 @@ data class GemmaImportedModelStatus(
     val isImported: Boolean,
     val fileSizeBytes: Long,
 )
-
-sealed interface GemmaImportResult {
-    data class Success(val model: GemmaModelSpec) : GemmaImportResult
-    data class UnsupportedFile(val message: String) : GemmaImportResult
-    data class Failure(val message: String) : GemmaImportResult
-}
 
 sealed interface GemmaDownloadResult {
     data class Success(val model: GemmaModelSpec) : GemmaDownloadResult
@@ -50,7 +43,7 @@ class GemmaImportRepository @Inject constructor(
     }
 
     suspend fun downloadRecommendedTextModel(
-        onProgress: (String) -> Unit,
+        onProgress: (ModelDownloadProgress) -> Unit,
     ): GemmaDownloadResult {
         return withContext(Dispatchers.IO) {
             val spec = GemmaModelCatalog.recommendedTextModel
@@ -64,10 +57,12 @@ class GemmaImportRepository @Inject constructor(
 
             val tempFile = File(targetDir, "${targetFile.name}.download")
             try {
-                onProgress("Downloading text AI model: ${spec.displayName}")
                 downloadFile(
                     url = GemmaModelCatalog.downloadUrl(spec),
                     outputFile = tempFile,
+                    title = "Text AI model",
+                    detail = spec.displayName,
+                    onProgress = onProgress,
                 )
 
                 if (targetFile.exists() && !targetFile.delete()) {
@@ -84,63 +79,6 @@ class GemmaImportRepository @Inject constructor(
                 tempFile.delete()
                 GemmaDownloadResult.Failure(e.message ?: "Text AI model download failed.")
             }
-        }
-    }
-
-    suspend fun importModelFromUri(uri: Uri): GemmaImportResult {
-        return withContext(Dispatchers.IO) {
-            val sourceFileName = getDisplayName(uri)
-                ?: return@withContext GemmaImportResult.Failure("Could not determine the selected file name.")
-
-            val spec = GemmaModelCatalog.findSupportedModelForImport(sourceFileName)
-                ?: return@withContext GemmaImportResult.UnsupportedFile(
-                    "Only ${GemmaModelCatalog.supportedModels.joinToString { it.expectedFileName }} are supported."
-                )
-
-            val targetFile = getModelFile(spec)
-            val targetDir = targetFile.parentFile
-                ?: return@withContext GemmaImportResult.Failure("Could not prepare model storage.")
-
-            if (!targetDir.exists() && !targetDir.mkdirs()) {
-                return@withContext GemmaImportResult.Failure("Could not create the model directory.")
-            }
-
-            val tempFile = File(targetDir, "${targetFile.name}.tmp")
-
-            try {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                } ?: return@withContext GemmaImportResult.Failure("Could not open the selected file.")
-
-                if (targetFile.exists() && !targetFile.delete()) {
-                    return@withContext GemmaImportResult.Failure("Could not replace the existing imported model.")
-                }
-
-                if (!tempFile.renameTo(targetFile)) {
-                    return@withContext GemmaImportResult.Failure("Could not finalize the imported model file.")
-                }
-
-                refresh()
-                GemmaImportResult.Success(spec)
-            } catch (e: Exception) {
-                tempFile.delete()
-                GemmaImportResult.Failure(e.message ?: "Import failed.")
-            }
-        }
-    }
-
-    suspend fun deleteImportedModel(modelId: GemmaModelId): Boolean {
-        return withContext(Dispatchers.IO) {
-            val spec = GemmaModelCatalog.supportedModels.firstOrNull { it.id == modelId } ?: return@withContext false
-            val deleted = getModelFile(spec).let { file ->
-                !file.exists() || file.delete()
-            }
-            if (deleted) {
-                refresh()
-            }
-            deleted
         }
     }
 
@@ -164,30 +102,67 @@ class GemmaImportRepository @Inject constructor(
         return File(context.getExternalFilesDir(null), "gemma")
     }
 
-    private fun getDisplayName(uri: Uri): String? {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0 && cursor.moveToFirst()) {
-                return cursor.getString(nameIndex)
-            }
-        }
-        return uri.lastPathSegment?.substringAfterLast('/')
-    }
-
-    private fun downloadFile(url: String, outputFile: File) {
+    private fun downloadFile(
+        url: String,
+        outputFile: File,
+        title: String,
+        detail: String,
+        onProgress: (ModelDownloadProgress) -> Unit,
+    ) {
         val connection = URL(url).openConnection().apply {
             connectTimeout = DOWNLOAD_TIMEOUT_MS
             readTimeout = DOWNLOAD_TIMEOUT_MS
             setRequestProperty("User-Agent", "VoxTranscribe")
         }
+        val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+        val startedAtNanos = System.nanoTime()
+        var lastUpdateNanos = startedAtNanos
+        var downloadedBytes = 0L
+
         connection.getInputStream().use { input ->
             FileOutputStream(outputFile).use { output ->
-                input.copyTo(output)
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    downloadedBytes += read
+
+                    val now = System.nanoTime()
+                    if (now - lastUpdateNanos >= PROGRESS_UPDATE_NANOS) {
+                        onProgress(
+                            ModelDownloadProgress(
+                                title = title,
+                                detail = detail,
+                                downloadedBytes = downloadedBytes,
+                                totalBytes = totalBytes,
+                                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, now),
+                            )
+                        )
+                        lastUpdateNanos = now
+                    }
+                }
             }
         }
+        val endedAtNanos = System.nanoTime()
+        onProgress(
+            ModelDownloadProgress(
+                title = title,
+                detail = detail,
+                downloadedBytes = downloadedBytes,
+                totalBytes = totalBytes,
+                speedBytesPerSecond = bytesPerSecond(downloadedBytes, startedAtNanos, endedAtNanos),
+            )
+        )
+    }
+
+    private fun bytesPerSecond(bytes: Long, startedAtNanos: Long, nowNanos: Long): Double {
+        val seconds = (nowNanos - startedAtNanos).coerceAtLeast(1L) / 1_000_000_000.0
+        return bytes / seconds
     }
 
     private companion object {
         const val DOWNLOAD_TIMEOUT_MS = 60_000
+        const val PROGRESS_UPDATE_NANOS = 250_000_000L
     }
 }

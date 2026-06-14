@@ -17,11 +17,17 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.example.voxtranscribe.MainActivity
 import com.example.voxtranscribe.data.ai.AiRepository
+import com.example.voxtranscribe.data.db.AI_STATUS_DONE
+import com.example.voxtranscribe.data.db.AI_STATUS_FAILED
+import com.example.voxtranscribe.data.db.AI_STATUS_IDLE
+import com.example.voxtranscribe.data.db.AI_STATUS_PROCESSING
 import com.example.voxtranscribe.domain.TranscriptionRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -40,12 +46,15 @@ class TranscriptionService : LifecycleService() {
     private val TAG = "TranscriptionService"
     private var activeNoteId: Long? = null
     private var segmentCollectorJob: Job? = null
+    private val segmentSaveMutex = Mutex()
     private val finalizedTranscriptParts = mutableListOf<String>()
 
     companion object {
         private const val CHANNEL_ID = "transcription_channel"
         private const val NOTIFICATION_ID = 1
         const val ACTION_START = "ACTION_START"
+        const val ACTION_PAUSE = "ACTION_PAUSE"
+        const val ACTION_RESUME = "ACTION_RESUME"
         const val ACTION_STOP = "ACTION_STOP"
         const val EXTRA_NOTE_ID = "NOTE_ID"
     }
@@ -70,6 +79,14 @@ class TranscriptionService : LifecycleService() {
             ACTION_STOP -> {
                 Log.d(TAG, "Stopping service")
                 stopForegroundService()
+            }
+            ACTION_PAUSE -> {
+                Log.d(TAG, "Pausing service")
+                pauseForegroundService()
+            }
+            ACTION_RESUME -> {
+                Log.d(TAG, "Resuming service")
+                resumeForegroundService()
             }
         }
         return START_NOT_STICKY
@@ -105,20 +122,7 @@ class TranscriptionService : LifecycleService() {
                 repository.transcriptionState.collect { entry ->
                     Log.d(TAG, "Received entry: ${entry.text}, isFinal: ${entry.isFinal}")
                     if (entry.isFinal) {
-                        if (finalizedTranscriptParts.any { it.trim() == entry.text.trim() }) {
-                            Log.d(TAG, "Skipping duplicate final segment for note $noteId")
-                            return@collect
-                        }
-                        finalizedTranscriptParts += entry.text
-                        try {
-                            // Prevent cancellation during save
-                            withContext(NonCancellable) {
-                                notesRepository.insertSegment(noteId, entry.text, true)
-                            }
-                            Log.d(TAG, "Saved segment to DB for note $noteId")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to insert segment", e)
-                        }
+                        saveFinalSegment(noteId, entry.text, "collector")
                     }
                 }
             }
@@ -128,13 +132,39 @@ class TranscriptionService : LifecycleService() {
         }
     }
 
+    private fun pauseForegroundService() {
+        lifecycleScope.launch {
+            updateNotification("Paused")
+            val finalizedCountBeforeStop = finalizedPartCount()
+            repository.stopListening()
+            persistVisibleTranscriptFallback(finalizedCountBeforeStop)
+        }
+    }
+
+    private fun resumeForegroundService() {
+        val noteId = activeNoteId ?: return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "Cannot resume transcription without RECORD_AUDIO permission")
+            return
+        }
+
+        updateNotification("Vox Transcribe is listening...")
+        lifecycleScope.launch {
+            Log.d(TAG, "Resuming repository listening for noteId: $noteId")
+            repository.startListening()
+        }
+    }
+
     private fun stopForegroundService() {
         lifecycleScope.launch {
             Log.d(TAG, "Calling stopListening...")
             updateNotification("Finalizing note...")
+            val finalizedCountBeforeStop = finalizedPartCount()
             repository.stopListening()
-            persistVisibleTranscriptFallback()
-            generateTitleForActiveNote()
+            persistVisibleTranscriptFallback(finalizedCountBeforeStop)
+            generateAiOutputsForActiveNote()
             segmentCollectorJob?.cancel()
             segmentCollectorJob = null
             Log.d(TAG, "stopListening returned. Stopping service.")
@@ -143,9 +173,10 @@ class TranscriptionService : LifecycleService() {
         }
     }
 
-    private suspend fun persistVisibleTranscriptFallback() {
+    private suspend fun persistVisibleTranscriptFallback(finalizedCountBeforeStop: Int) {
         val noteId = activeNoteId ?: return
-        if (finalizedTranscriptParts.isNotEmpty()) {
+        if (finalizedPartCount() != finalizedCountBeforeStop) {
+            Log.d(TAG, "Skipping visible transcript fallback because final collector saved text")
             return
         }
 
@@ -154,47 +185,106 @@ class TranscriptionService : LifecycleService() {
             Log.w(TAG, "No finalized or visible transcript available for note $noteId")
             return
         }
-        if (finalizedTranscriptParts.any { it.trim() == text }) {
-            return
-        }
 
-        try {
-            withContext(NonCancellable) {
-                notesRepository.insertSegment(noteId, text, true)
+        saveFinalSegment(noteId, text, "visible fallback")
+    }
+
+    private suspend fun finalizedPartCount(): Int = segmentSaveMutex.withLock {
+        finalizedTranscriptParts.size
+    }
+
+    private suspend fun finalizedTranscriptSnapshot(): List<String> = segmentSaveMutex.withLock {
+        finalizedTranscriptParts.toList()
+    }
+
+    private suspend fun saveFinalSegment(noteId: Long, text: String, source: String): Boolean {
+        val trimmedText = text.trim()
+        val normalizedText = normalizeTranscriptText(trimmedText)
+        if (normalizedText.isBlank()) return false
+
+        return segmentSaveMutex.withLock {
+            val savedCombined = normalizeTranscriptText(finalizedTranscriptParts.joinToString(" "))
+            val isDuplicate = finalizedTranscriptParts.any {
+                normalizeTranscriptText(it) == normalizedText
+            } || savedCombined == normalizedText
+
+            if (isDuplicate) {
+                Log.d(TAG, "Skipping duplicate final segment from $source for note $noteId")
+                return@withLock false
             }
-            finalizedTranscriptParts += text
-            Log.d(TAG, "Saved visible transcript fallback to DB for note $noteId")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save visible transcript fallback", e)
+
+            try {
+                withContext(NonCancellable) {
+                    notesRepository.insertSegment(noteId, trimmedText, true)
+                }
+                finalizedTranscriptParts += trimmedText
+                Log.d(TAG, "Saved segment from $source to DB for note $noteId")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to insert segment from $source", e)
+                false
+            }
         }
     }
 
-    private suspend fun generateTitleForActiveNote() {
+    private fun normalizeTranscriptText(text: String): String {
+        return text.trim().replace(Regex("\\s+"), " ")
+    }
+
+    private suspend fun generateAiOutputsForActiveNote() {
         val noteId = activeNoteId ?: return
-        val transcript = finalizedTranscriptParts
+        val transcript = finalizedTranscriptSnapshot()
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .joinToString(separator = "\n")
             .trim()
         if (transcript.isBlank()) {
+            updateAiProgress(noteId, AI_STATUS_IDLE, 0f, null)
             activeNoteId = null
             finalizedTranscriptParts.clear()
             return
         }
 
         try {
-            Log.d(TAG, "Generating automatic title for noteId: $noteId")
-            updateNotification("Title generation...")
+            Log.d(TAG, "Generating automatic AI outputs for noteId: $noteId")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.1f, "Preparing AI cleanup...")
+
+            updateNotification("Generating title...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.25f, "Generating title...")
             val title = aiRepository.generateTitle(transcript)
             withContext(NonCancellable) {
                 notesRepository.updateNoteTitle(noteId, title)
             }
+
+            updateNotification("Cleaning transcript...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.5f, "Cleaning transcript...")
+            val cleanedTranscript = aiRepository.cleanTranscript(transcript).ifBlank { transcript }
+            withContext(NonCancellable) {
+                notesRepository.updateCleanedTranscript(noteId, cleanedTranscript)
+            }
+
+            updateNotification("Generating summary...")
+            updateAiProgress(noteId, AI_STATUS_PROCESSING, 0.75f, "Generating summary...")
+            val summary = aiRepository.summarize(cleanedTranscript)
+
+            withContext(NonCancellable) {
+                notesRepository.updateAiResults(noteId, summary, null)
+            }
+
+            updateAiProgress(noteId, AI_STATUS_DONE, 1f, "AI cleanup complete")
         } catch (e: Exception) {
-            Log.w(TAG, "Automatic title generation failed for noteId: $noteId", e)
+            Log.w(TAG, "Automatic AI generation failed for noteId: $noteId", e)
+            updateAiProgress(noteId, AI_STATUS_FAILED, 1f, "AI cleanup failed")
         } finally {
             activeNoteId = null
             finalizedTranscriptParts.clear()
+        }
+    }
+
+    private suspend fun updateAiProgress(noteId: Long, status: String, progress: Float, message: String?) {
+        withContext(NonCancellable) {
+            notesRepository.updateAiStatus(noteId, status, progress.coerceIn(0f, 1f), message)
         }
     }
 
