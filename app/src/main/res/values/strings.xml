@@ -58,6 +58,10 @@
     <string name="speech_model_status">Speech: %1$s</string>
     <string name="text_ai_model_status">Text AI: %1$s</string>
     <string name="missing">missing</string>
+    <string name="download">Download</string>
+    <string name="re_download">Re-download</string>
+    <string name="installed_selected">Installed, selected</string>
+    <string name="ai_model_detail">%1$s download · needs about %2$d GB RAM</string>
     <string name="re_download_speech_model">Re-download speech model</string>
     <string name="re_download_ai_model">Re-download AI model</string>
     <string name="view_setup_screen">View setup screen</string>
@@ -70,6 +74,8 @@
     <string name="no_transcript_text_saved">No transcript text saved.</string>
     <string name="summary_generating">Summary is being generated...</string>
     <string name="summary_pending">Summary will appear here once AI cleanup has run.</string>
+    <string name="rerun_text_ai">Run text AI again</string>
+    <string name="rerun_text_ai_running">Text AI is running...</string>
     <string name="ai_cleanup_failed">AI cleanup failed</string>
     <string name="ai_cleanup_running">AI cleanup running</string>
     <string name="ai_cleanup_failed_description">The transcript was saved, but AI cleanup did not finish.</string>

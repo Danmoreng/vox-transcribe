@@ -6,8 +6,11 @@ import com.example.voxtranscribe.data.AppLanguage
 import com.example.voxtranscribe.data.AppLanguageRepository
 import com.example.voxtranscribe.data.ModelDownloadProgress
 import com.example.voxtranscribe.data.gemma.GemmaDownloadResult
+import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
 import com.example.voxtranscribe.data.gemma.GemmaImportRepository
 import com.example.voxtranscribe.data.gemma.GemmaModelCatalog
+import com.example.voxtranscribe.data.gemma.GemmaModelId
+import com.example.voxtranscribe.data.gemma.GemmaModelSpec
 import com.example.voxtranscribe.data.gemma.GemmaSettingsRepository
 import com.example.voxtranscribe.data.parakeet.ParakeetDownloadResult
 import com.example.voxtranscribe.data.parakeet.ParakeetImportRepository
@@ -33,6 +36,8 @@ data class GemmaModelUiState(
     val downloadProgress: ModelDownloadProgress? = null,
     val speechModelDownloadSizeBytes: Long = ParakeetModelCatalog.streamingModel.downloadSizeBytes,
     val textAiModelDownloadSizeBytes: Long = GemmaModelCatalog.recommendedTextModel.downloadSizeBytes,
+    val textAiModelStatuses: List<GemmaImportedModelStatus> = emptyList(),
+    val selectedTextAiModelId: GemmaModelId? = null,
 ) {
     val setupComplete: Boolean
         get() = hasSpeechModel && hasTextAiModel
@@ -56,13 +61,14 @@ class GemmaModelViewModel @Inject constructor(
         appLanguageRepository.appLanguage,
         parakeetSettingsRepository.transcriptionLanguage,
         parakeetSettingsRepository.showDebugStats,
+        settingsRepository.selectedModelId,
         _isImporting,
         _downloadProgress,
     ) { values ->
         val gemmaStatuses = values[0] as List<*>
         val parakeetStatuses = values[1] as List<*>
         @Suppress("UNCHECKED_CAST")
-        val typedGemmaStatuses = gemmaStatuses as List<com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus>
+        val typedGemmaStatuses = gemmaStatuses as List<GemmaImportedModelStatus>
         @Suppress("UNCHECKED_CAST")
         val typedParakeetStatuses = parakeetStatuses as List<com.example.voxtranscribe.data.parakeet.ParakeetImportedModelStatus>
 
@@ -72,8 +78,10 @@ class GemmaModelViewModel @Inject constructor(
             appLanguage = values[2] as AppLanguage,
             parakeetTranscriptionLanguage = values[3] as ParakeetTranscriptionLanguage,
             showDebugStats = values[4] as Boolean,
-            isImporting = values[5] as Boolean,
-            downloadProgress = values[6] as ModelDownloadProgress?,
+            selectedTextAiModelId = values[5] as GemmaModelId?,
+            isImporting = values[6] as Boolean,
+            downloadProgress = values[7] as ModelDownloadProgress?,
+            textAiModelStatuses = typedGemmaStatuses,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -105,9 +113,13 @@ class GemmaModelViewModel @Inject constructor(
     }
 
     fun downloadRecommendedTextAiModel() {
+        downloadTextAiModel(GemmaModelCatalog.recommendedTextModel)
+    }
+
+    fun downloadTextAiModel(spec: GemmaModelSpec) {
         viewModelScope.launch {
             _isImporting.value = true
-            val result = importRepository.downloadRecommendedTextModel { progress ->
+            val result = importRepository.downloadTextModel(spec) { progress ->
                 _downloadProgress.value = progress
             }
             when (result) {
@@ -118,6 +130,14 @@ class GemmaModelViewModel @Inject constructor(
             }
             _downloadProgress.value = null
             _isImporting.value = false
+        }
+    }
+
+    fun selectTextAiModel(spec: GemmaModelSpec) {
+        viewModelScope.launch {
+            if (importRepository.getImportedModelPath(spec.id) != null) {
+                settingsRepository.setSelectedModelId(spec.id)
+            }
         }
     }
 

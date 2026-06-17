@@ -19,6 +19,7 @@ No audio or transcript text is sent to an app server.
 - Automatic title generation after recording
 - Automatic transcript cleanup with on-device text AI
 - Automatic summary generation
+- Manual re-run of text AI cleanup and summary generation for existing notes
 - Selectable and copyable transcript and summary text
 - One-tap copy for the full note
 - Minimal setup screen with direct model downloads and progress
@@ -41,12 +42,14 @@ Vox Transcribe currently uses two local models:
 
 | Purpose | Model | Runtime | Approx. download |
 | --- | --- | --- | --- |
-| Speech recognition | [Nemotron 3.5 ASR Streaming 0.6B ONNX INT4](https://huggingface.co/onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4) | ONNX Runtime GenAI | 1.5 GB |
-| Text AI | [Gemma 4 E2B LiteRT-LM](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) | LiteRT-LM | 2.6 GB |
+| Speech recognition | [Nemotron 3.5 ASR Streaming 0.6B ONNX INT4](https://huggingface.co/onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4) | ONNX Runtime GenAI | 793 MB |
+| Text AI | [Gemma 4 E4B LiteRT-LM](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) | LiteRT-LM | 3.66 GB |
 
 The models are not bundled in the repository or APK. The app downloads them from Hugging Face during setup and stores them locally on the device.
 
-The code also contains catalog support for Gemma 4 E4B, but the recommended default text model is Gemma 4 E2B.
+Gemma 4 E4B is the only supported text AI model. Smaller Gemma 4 E2B builds were tested but removed from the supported catalog because transcript cleanup quality was not sufficient.
+
+Text AI cleanup uses conservative task-specific sampling, sentence-aware transcript chunks, and short previous-context snippets to improve long transcript cleanup without requiring a hand-written glossary.
 
 ## Privacy
 
@@ -61,7 +64,7 @@ Vox Transcribe is built around local inference:
 
 - Android device with API 31 or newer
 - arm64-v8a device
-- At least 8 GB device memory recommended
+- At least 12 GB device memory recommended
 - Several GB of free storage for local models
 - Android Studio / Android Gradle Plugin compatible with the checked-in Gradle configuration
 - ONNX Runtime GenAI Android native package available at `models/onnxruntime-genai-android-0.14.0`

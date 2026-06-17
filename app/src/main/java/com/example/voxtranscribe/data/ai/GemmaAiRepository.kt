@@ -21,16 +21,24 @@ class GemmaAiRepository @Inject constructor(
 
         transformTranscriptChunks(
             transcript = cleanedTranscript,
-            promptBuilder = { text ->
+            promptBuilder = { chunk ->
                 """
                     Clean up the following speech-to-text transcript for readability.
                     $languageInstruction
-                    Fix obvious spacing, punctuation, casing, and repeated filler artifacts.
-                    Preserve the meaning and all concrete information.
-                    Do not summarize. Do not add facts. Return only the cleaned transcript.
+                    Correct clear speech-to-text mistakes when the nearby context strongly supports the correction.
+                    Fix spacing, punctuation, casing, paragraph breaks, repeated filler artifacts, and obvious grammar artifacts.
+                    Keep the speaker's wording and level of detail. Preserve the meaning and all concrete information.
+                    You may normalize obvious common terms, abbreviations, and named entities when context makes the intended wording clear.
+                    If a name, product name, abbreviation, number, date, currency, or rollout status is genuinely uncertain, keep it close to the source wording instead of guessing.
+                    Do not summarize. Do not add facts. Do not add currencies or dates that are not explicit.
+                    Do not make the text more polished by changing the speaker's intent.
+                    Return only the cleaned excerpt.
 
-                    Transcript:
-                    $text
+                    Previous context for disambiguation only. Do not include this context in your output:
+                    ${chunk.previousContext.ifBlank { "(none)" }}
+
+                    Excerpt to clean:
+                    ${chunk.text}
                 """.trimIndent()
             },
         )
@@ -48,7 +56,9 @@ class GemmaAiRepository @Inject constructor(
                     Summarize the following meeting transcript.
                     $languageInstruction
                     $SUMMARY_INSTRUCTION
-                    Do not invent facts.
+                    Be conservative with names, numbers, dates, currencies, and rollout status.
+                    Do not invent facts. Do not add a currency unless it is explicit in the transcript.
+                    Distinguish pilots, planned launches, and live products only when the transcript explicitly supports it.
                     Return the summary only in the required output language.
 
                     Transcript:
@@ -61,6 +71,8 @@ class GemmaAiRepository @Inject constructor(
                     $languageInstruction
                     $SUMMARY_INSTRUCTION
                     Deduplicate overlap and preserve only information supported by the transcript.
+                    Be conservative with names, numbers, dates, currencies, and rollout status.
+                    Do not add a currency unless it is explicit in the transcript.
                     Return the final summary only in the required output language.
 
                     Partial summaries:
@@ -78,12 +90,14 @@ class GemmaAiRepository @Inject constructor(
             prompt = """
                 Generate a short professional title for the following meeting transcript.
                 Return only the title text and keep it under 5 words.
+                Be conservative. Do not invent a specific company, product, or event name unless it is explicit.
                 $languageInstruction
 
                 Transcript:
                 $titleTranscript
             """.trimIndent(),
             requestedGenerationTokens = 64,
+            temperature = TITLE_TEMPERATURE,
         ).trim().removePrefix("\"").removeSuffix("\"").ifBlank { "Untitled Note" }
     }
 
@@ -99,6 +113,7 @@ class GemmaAiRepository @Inject constructor(
             return runtimeManager.generateText(
                 prompt = promptBuilder(cleanedTranscript),
                 requestedGenerationTokens = requestedGenerationTokens,
+                temperature = SUMMARY_TEMPERATURE,
             ).ifBlank { fallbackValue }
         } catch (e: Exception) {
             if (!isContextTooLongError(e)) {
@@ -111,6 +126,7 @@ class GemmaAiRepository @Inject constructor(
             val chunkResult = runtimeManager.generateText(
                 prompt = promptBuilder(chunk),
                 requestedGenerationTokens = CHUNK_GENERATION_TOKENS,
+                temperature = SUMMARY_TEMPERATURE,
             ).ifBlank { fallbackValue }
             "Chunk ${index + 1}:\n$chunkResult"
         }
@@ -125,15 +141,20 @@ class GemmaAiRepository @Inject constructor(
 
     private suspend fun transformTranscriptChunks(
         transcript: String,
-        promptBuilder: (String) -> String,
+        promptBuilder: (TranscriptChunk) -> String,
     ): String {
-        val chunks = splitTranscriptIntoChunks(transcript, CLEANUP_CHUNK_CHAR_LIMIT)
+        val chunks = splitTranscriptIntoChunksWithContext(
+            transcript = transcript,
+            maxChars = CLEANUP_CHUNK_CHAR_LIMIT,
+            contextSentenceCount = CLEANUP_CONTEXT_SENTENCES,
+        )
         return chunks
             .map { chunk ->
                 runtimeManager.generateText(
                     prompt = promptBuilder(chunk),
                     requestedGenerationTokens = CLEANUP_GENERATION_TOKENS,
-                ).trim().ifBlank { chunk }
+                    temperature = CLEANUP_TEMPERATURE,
+                ).trim().ifBlank { chunk.text }
             }
             .joinToString(separator = "\n\n")
             .trim()
@@ -157,6 +178,7 @@ class GemmaAiRepository @Inject constructor(
             runtimeManager.generateText(
                 prompt = reducerPromptBuilder(combined),
                 requestedGenerationTokens = requestedGenerationTokens,
+                temperature = SUMMARY_TEMPERATURE,
             ).ifBlank { fallbackValue }
         } catch (e: Exception) {
             if (!isContextTooLongError(e) || partials.size <= REDUCE_BATCH_SIZE) {
@@ -183,9 +205,37 @@ class GemmaAiRepository @Inject constructor(
         }
     }
 
+    private data class TranscriptChunk(
+        val text: String,
+        val previousContext: String,
+    )
+
+    private fun splitTranscriptIntoChunksWithContext(
+        transcript: String,
+        maxChars: Int,
+        contextSentenceCount: Int,
+    ): List<TranscriptChunk> {
+        val units = splitTranscriptIntoUnits(transcript)
+        val chunks = splitUnitsIntoChunks(units, maxChars)
+        var consumedUnits = 0
+        return chunks.map { chunk ->
+            val chunkUnits = splitTranscriptIntoUnits(chunk)
+            val previousContext = units
+                .drop((consumedUnits - contextSentenceCount).coerceAtLeast(0))
+                .take(consumedUnits - (consumedUnits - contextSentenceCount).coerceAtLeast(0))
+                .joinToString(separator = " ")
+            consumedUnits += chunkUnits.size
+            TranscriptChunk(text = chunk, previousContext = previousContext)
+        }
+    }
+
     private fun splitTranscriptIntoChunks(transcript: String, maxChars: Int): List<String> {
-        if (transcript.length <= maxChars) {
-            return listOf(transcript)
+        return splitUnitsIntoChunks(splitTranscriptIntoUnits(transcript), maxChars)
+    }
+
+    private fun splitUnitsIntoChunks(units: List<String>, maxChars: Int): List<String> {
+        if (units.isEmpty()) {
+            return emptyList()
         }
 
         val chunks = mutableListOf<String>()
@@ -199,24 +249,15 @@ class GemmaAiRepository @Inject constructor(
             current.clear()
         }
 
-        transcript.lineSequence().forEach { rawLine ->
-            val line = rawLine.trim()
-            if (line.isEmpty()) {
-                return@forEach
-            }
-
-            if (line.length > maxChars) {
+        units.forEach { unit ->
+            if (unit.length > maxChars) {
                 flushCurrent()
-                splitLongLine(line, maxChars).forEach { chunks += it }
+                splitLongLine(unit, maxChars).forEach { chunks += it }
                 return@forEach
             }
 
-            val candidateLength = if (current.isEmpty()) {
-                line.length
-            } else {
-                current.length + 1 + line.length
-            }
-
+            val separator = if (current.isEmpty()) "" else "\n"
+            val candidateLength = current.length + separator.length + unit.length
             if (candidateLength > maxChars) {
                 flushCurrent()
             }
@@ -224,11 +265,24 @@ class GemmaAiRepository @Inject constructor(
             if (current.isNotEmpty()) {
                 current.append('\n')
             }
-            current.append(line)
+            current.append(unit)
         }
 
         flushCurrent()
         return chunks
+    }
+
+    private fun splitTranscriptIntoUnits(transcript: String): List<String> {
+        return transcript.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .flatMap { line ->
+                SENTENCE_BOUNDARY_REGEX.split(line)
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+            }
+            .toList()
     }
 
     private fun splitLongLine(line: String, maxChars: Int): List<String> {
@@ -324,8 +378,13 @@ class GemmaAiRepository @Inject constructor(
         const val REDUCED_CHUNK_GENERATION_TOKENS = 320
         const val TRANSCRIPT_CHUNK_CHAR_LIMIT = 5000
         const val CLEANUP_CHUNK_CHAR_LIMIT = 2500
+        const val CLEANUP_CONTEXT_SENTENCES = 2
         const val REDUCE_BATCH_SIZE = 3
         const val TITLE_TRANSCRIPT_CHAR_LIMIT = 2000
+        const val CLEANUP_TEMPERATURE = 0.15
+        const val SUMMARY_TEMPERATURE = 0.25
+        const val TITLE_TEMPERATURE = 0.35
+        val SENTENCE_BOUNDARY_REGEX = Regex("""(?<=[.!?])\s+""")
         val TIMESTAMP_RANGE_LINE_REGEX = Regex("""^\[\s*\d+m\d+s\d+ms\s*-\s*\d+m\d+s\d+ms\s*\]$""", RegexOption.IGNORE_CASE)
     }
 }

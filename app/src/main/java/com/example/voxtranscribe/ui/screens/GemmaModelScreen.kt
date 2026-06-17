@@ -1,6 +1,9 @@
 package com.example.voxtranscribe.ui.screens
 
 import android.app.Activity
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -22,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -41,6 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.voxtranscribe.R
 import com.example.voxtranscribe.data.ModelDownloadProgress
 import com.example.voxtranscribe.data.AppLanguage
+import com.example.voxtranscribe.data.gemma.GemmaImportedModelStatus
+import com.example.voxtranscribe.data.gemma.GemmaModelId
 import com.example.voxtranscribe.data.parakeet.ParakeetTranscriptionLanguage
 import com.example.voxtranscribe.ui.GemmaModelViewModel
 import java.text.DecimalFormat
@@ -71,6 +79,7 @@ fun GemmaModelScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
@@ -146,13 +155,17 @@ fun GemmaModelScreen(
                 ) {
                     Text(stringResource(R.string.re_download_speech_model))
                 }
-                Button(
-                    onClick = viewModel::downloadRecommendedTextAiModel,
-                    enabled = !uiState.isImporting,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.re_download_ai_model))
+
+                uiState.textAiModelStatuses.forEach { status ->
+                    TextAiModelRow(
+                        status = status,
+                        selectedModelId = uiState.selectedTextAiModelId,
+                        isImporting = uiState.isImporting,
+                        onDownload = { viewModel.downloadTextAiModel(status.spec) },
+                        onSelect = { viewModel.selectTextAiModel(status.spec) },
+                    )
                 }
+
                 Button(
                     onClick = onNavigateToSetupPreview,
                     enabled = !uiState.isImporting,
@@ -160,6 +173,65 @@ fun GemmaModelScreen(
                 ) {
                     Text(stringResource(R.string.view_setup_screen))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TextAiModelRow(
+    status: GemmaImportedModelStatus,
+    selectedModelId: GemmaModelId?,
+    isImporting: Boolean,
+    onDownload: () -> Unit,
+    onSelect: () -> Unit,
+) {
+    val isSelected = status.spec.id == selectedModelId
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RadioButton(
+                selected = isSelected,
+                onClick = onSelect,
+                enabled = status.isImported && !isImporting,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(status.spec.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = stringResource(
+                        R.string.ai_model_detail,
+                        formatBytes(status.spec.downloadSizeBytes),
+                        status.spec.minDeviceMemoryGb,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = if (status.isImported) {
+                        if (isSelected) stringResource(R.string.installed_selected) else stringResource(R.string.installed)
+                    } else {
+                        stringResource(R.string.missing)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Button(
+                onClick = onDownload,
+                enabled = !isImporting,
+            ) {
+                Text(if (status.isImported) stringResource(R.string.re_download) else stringResource(R.string.download))
             }
         }
     }

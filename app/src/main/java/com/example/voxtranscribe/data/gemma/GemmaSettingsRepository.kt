@@ -36,7 +36,10 @@ class GemmaSettingsRepository @Inject constructor(
 
     private fun readSelectedModelId(): GemmaModelId? {
         val storedValue = prefs.getString(KEY_SELECTED_MODEL_ID, null) ?: return null
-        return GemmaModelId.entries.firstOrNull { it.name == storedValue }
+        val storedModelId = GemmaModelId.entries.firstOrNull { it.name == storedValue } ?: return null
+        return storedModelId.takeIf { modelId ->
+            GemmaModelCatalog.supportedModels.any { it.id == modelId }
+        }
     }
 
     private companion object {

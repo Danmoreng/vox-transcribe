@@ -45,8 +45,14 @@ class GemmaImportRepository @Inject constructor(
     suspend fun downloadRecommendedTextModel(
         onProgress: (ModelDownloadProgress) -> Unit,
     ): GemmaDownloadResult {
+        return downloadTextModel(GemmaModelCatalog.recommendedTextModel, onProgress)
+    }
+
+    suspend fun downloadTextModel(
+        spec: GemmaModelSpec,
+        onProgress: (ModelDownloadProgress) -> Unit,
+    ): GemmaDownloadResult {
         return withContext(Dispatchers.IO) {
-            val spec = GemmaModelCatalog.recommendedTextModel
             val targetFile = getModelFile(spec)
             val targetDir = targetFile.parentFile
                 ?: return@withContext GemmaDownloadResult.Failure("Could not prepare model storage.")

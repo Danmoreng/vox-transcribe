@@ -19,7 +19,7 @@ object ParakeetModelCatalog {
         id = ParakeetModelId.NEMOTRON_3_5_ASR_STREAMING_0_6B,
         displayName = "Nemotron 3.5 ASR Streaming 0.6B ONNX",
         storageFileName = "nemotron-onnx",
-        downloadSizeBytes = 1_500_000_000L,
+        downloadSizeBytes = 793_000_000L,
         minDeviceMemoryGb = 8,
     )
 

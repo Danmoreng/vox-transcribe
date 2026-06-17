@@ -44,7 +44,13 @@ class GemmaRuntimeManager @Inject constructor(
     private val _runtimeStatus = MutableStateFlow(GemmaRuntimeStatus())
     val runtimeStatus: StateFlow<GemmaRuntimeStatus> = _runtimeStatus.asStateFlow()
 
-    suspend fun generateText(prompt: String, requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS): String {
+    suspend fun generateText(
+        prompt: String,
+        requestedGenerationTokens: Int = DEFAULT_GENERATION_TOKENS,
+        temperature: Double = DEFAULT_TEMPERATURE,
+        topK: Int = DEFAULT_TOP_K,
+        topP: Double = DEFAULT_TOP_P,
+    ): String {
         return mutex.withLock {
             val selectedModelId = settingsRepository.selectedModelId.value
                 ?: throw IllegalStateException("No Gemma model is selected.")
@@ -58,7 +64,11 @@ class GemmaRuntimeManager @Inject constructor(
                 requiredContextTokens = requiredContextTokens,
             )
 
-            val conversation = createConversation()
+            val conversation = createConversation(
+                temperature = temperature,
+                topK = topK,
+                topP = topP,
+            )
             try {
                 runConversation(conversation, listOf(Content.Text(prompt)))
             } finally {
@@ -161,12 +171,16 @@ class GemmaRuntimeManager @Inject constructor(
         return gpuDelegateAvailable
     }
 
-    private fun createConversation(): Conversation {
+    private fun createConversation(
+        temperature: Double,
+        topK: Int,
+        topP: Double,
+    ): Conversation {
         val currentEngine = engine ?: throw IllegalStateException("Gemma engine is not initialized.")
         val samplerConfig = SamplerConfig(
-            topK = 64,
-            topP = 0.95,
-            temperature = 0.7,
+            topK = topK,
+            topP = topP,
+            temperature = temperature,
         )
         return currentEngine.createConversation(
             ConversationConfig(
@@ -233,6 +247,9 @@ class GemmaRuntimeManager @Inject constructor(
     companion object {
         private const val TAG = "GemmaRuntimeManager"
         private const val DEFAULT_GENERATION_TOKENS = 1024
+        private const val DEFAULT_TEMPERATURE = 0.7
+        private const val DEFAULT_TOP_K = 64
+        private const val DEFAULT_TOP_P = 0.95
         private const val MIN_CONTEXT_TOKENS = 2048
         private const val CONTEXT_HEADROOM_TOKENS = 512
     }

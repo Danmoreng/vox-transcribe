@@ -58,6 +58,10 @@
     <string name="speech_model_status">Sprache: %1$s</string>
     <string name="text_ai_model_status">Text-KI: %1$s</string>
     <string name="missing">fehlt</string>
+    <string name="download">Herunterladen</string>
+    <string name="re_download">Erneut laden</string>
+    <string name="installed_selected">Installiert, ausgewählt</string>
+    <string name="ai_model_detail">%1$s Download · benötigt ca. %2$d GB RAM</string>
     <string name="re_download_speech_model">Sprachmodell erneut herunterladen</string>
     <string name="re_download_ai_model">KI-Modell erneut herunterladen</string>
     <string name="view_setup_screen">Setup-Screen anzeigen</string>
@@ -70,6 +74,8 @@
     <string name="no_transcript_text_saved">Kein Transkript gespeichert.</string>
     <string name="summary_generating">Zusammenfassung wird erstellt...</string>
     <string name="summary_pending">Die Zusammenfassung erscheint hier, sobald die KI-Bereinigung abgeschlossen ist.</string>
+    <string name="rerun_text_ai">Text-KI erneut ausführen</string>
+    <string name="rerun_text_ai_running">Text-KI läuft...</string>
     <string name="ai_cleanup_failed">KI-Bereinigung fehlgeschlagen</string>
     <string name="ai_cleanup_running">KI-Bereinigung läuft</string>
     <string name="ai_cleanup_failed_description">Das Transkript wurde gespeichert, aber die KI-Bereinigung wurde nicht abgeschlossen.</string>

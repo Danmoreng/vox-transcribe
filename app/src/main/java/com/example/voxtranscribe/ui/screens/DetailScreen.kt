@@ -16,7 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -150,6 +152,7 @@ fun DetailScreen(
         noteDetail?.let { detail ->
             NoteContent(
                 detail = detail,
+                onRerunTextAi = viewModel::rerunTextAi,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -168,6 +171,7 @@ fun DetailScreen(
 @Composable
 private fun NoteContent(
     detail: NoteWithSegments,
+    onRerunTextAi: (NoteWithSegments) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val transcript = remember(detail.note.cleanedTranscript, detail.segments) {
@@ -209,6 +213,21 @@ private fun NoteContent(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                Button(
+                    onClick = { onRerunTextAi(detail) },
+                    enabled = detail.note.aiStatus != AI_STATUS_PROCESSING,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text(
+                        text = if (detail.note.aiStatus == AI_STATUS_PROCESSING) {
+                            stringResource(R.string.rerun_text_ai_running)
+                        } else {
+                            stringResource(R.string.rerun_text_ai)
+                        },
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
                 if (detail.note.aiStatus == AI_STATUS_PROCESSING || detail.note.aiStatus == AI_STATUS_FAILED) {
                     AiProgressCard(note = detail.note)
                 }
