@@ -1,0 +1,111 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 0.1.0. Defaults to the tag name without v."
+        required: false
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as a prerelease."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            if [ "${{ github.ref_type }}" = "tag" ]; then
+              version="${{ github.ref_name }}"
+            else
+              version="0.1.${{ github.run_number }}"
+            fi
+          fi
+          echo "RELEASE_VERSION=${version#v}" >> "$GITHUB_ENV"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          sdkmanager --install \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.2.12479018" \
+            "cmake;3.22.1"
+
+      - name: Download ONNX Runtime GenAI Android package
+        shell: bash
+        run: |
+          package_url="https://github.com/microsoft/onnxruntime-genai/releases/download/v0.14.0/onnxruntime-genai-android-0.14.0.aar"
+          package_sha256="c2e9b967a1ecdf766246fbee8572c6637df01183cc263f9b954c01a9ec591f69"
+          package_path="${RUNNER_TEMP}/onnxruntime-genai-android-0.14.0.aar"
+
+          curl --fail --location --retry 3 --output "$package_path" "$package_url"
+          echo "$package_sha256  $package_path" | sha256sum --check --strict
+
+          mkdir -p models/onnxruntime-genai-android-0.14.0
+          unzip -q "$package_path" -d models/onnxruntime-genai-android-0.14.0
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/release/app-release.apk \
+            "artifacts/vox-transcribe-${RELEASE_VERSION}-arm64-v8a.apk"
+          ls -lh artifacts
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vox-transcribe-${{ env.RELEASE_VERSION }}
+          path: artifacts/*.apk
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.RELEASE_VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Vox Transcribe ${{ env.RELEASE_VERSION }}
+          body: |
+            Android APK:
+
+            - `vox-transcribe-${{ env.RELEASE_VERSION }}-arm64-v8a.apk`
+
+            The APK is the Android release build for arm64 devices.
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+          files: artifacts/*.apk

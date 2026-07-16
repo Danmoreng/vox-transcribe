@@ -24,6 +24,9 @@ android {
 
     buildTypes {
         release {
+            // GitHub releases need an installable APK. Replace this with a
+            // production signing config before distributing through an app store.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
